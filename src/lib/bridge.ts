@@ -35,6 +35,59 @@ type Frame = {
   seconds?: number
   when?: string
   servers?: Array<string | { name?: string }>
+  model?: string
+  pretty?: string
+  state?: FocusState
+  listen?: boolean
+  drift?: boolean
+}
+
+/**
+ * A focus session as the page is allowed to see it: booleans and counters
+ * only. The bridge never sends an app or site name in here.
+ */
+export type FocusState = {
+  active: boolean
+  paused?: boolean
+  deferred?: boolean
+  settleTicks?: number
+  locked?: boolean
+  appOnly?: boolean
+  awaitingIntent?: boolean
+  adrift?: boolean
+  excused?: boolean
+  snoozed?: boolean
+  remainingMs?: number
+  plannedMs?: number
+  onTargetMs?: number
+  adriftMs?: number
+  drifts?: number
+  nagEveryMs?: number
+}
+
+/** A line the bridge wants spoken outside any turn — a focus callout or report. */
+export type SayFrame = { text: string; listen: boolean; drift: boolean }
+
+let onSay: ((s: SayFrame) => void) | null = null
+export function watchSay(fn: (s: SayFrame) => void) {
+  onSay = fn
+}
+
+let onBrain: ((b: { model: string; pretty: string }) => void) | null = null
+export function watchBrain(fn: (b: { model: string; pretty: string }) => void) {
+  onBrain = fn
+}
+
+let onFocus: ((f: FocusState) => void) | null = null
+export function watchFocus(fn: (f: FocusState) => void) {
+  onFocus = fn
+}
+
+/** The screen share's counterpart to the camera handler: one frame, on request. */
+export type ScreenResult = { data?: string; mimeType?: string; surface?: string; error?: string }
+let onScreen: (() => Promise<ScreenResult>) | null = null
+export function watchScreen(fn: () => Promise<ScreenResult>) {
+  onScreen = fn
 }
 
 /** Every question gets an id so its answer can be told from anyone else's. */
@@ -143,9 +196,46 @@ const RECONNECT_DELAYS = [500, 1000, 2000, 4000, 8000, 8000]
 let attempt = 0
 let reconnectTimer = 0
 
+/**
+ * The conversation this page is in. Null on a fresh page — a new chat. Once
+ * the bridge names it, every reconnect carries it on, so a dropped connection
+ * no longer starts him from nothing; and picking a chat from the history
+ * switches to it.
+ */
+let currentChat: string | null = null
+let onChat: ((id: string | null) => void) | null = null
+export const currentChatId = () => currentChat
+export function watchChat(fn: (id: string | null) => void) {
+  onChat = fn
+}
+const socketUrl = () => (currentChat ? `${BRIDGE_WS_URL}${BRIDGE_WS_URL.includes('?') ? '&' : '?'}resume=${encodeURIComponent(currentChat)}` : BRIDGE_WS_URL)
+
+/** Carry on an earlier chat (its id), or start a new one (null). */
+export async function switchChat(id: string | null): Promise<void> {
+  cancel()
+  currentChat = id
+  onChat?.(id)
+  const old = socket
+  socket = null
+  connecting = null
+  clearTimeout(reconnectTimer)
+  if (old) {
+    old.onclose = null
+    old.onerror = null
+    try {
+      old.close()
+    } catch {
+      /* already closed */
+    }
+  }
+  await connect()
+}
+
 function scheduleReconnect() {
-  if (attempt >= RECONNECT_DELAYS.length) return
-  const delay = RECONNECT_DELAYS[attempt]
+  // Long enough to see a restart through (the brain takes a few seconds to come
+  // back), after which the last delay repeats for about two minutes.
+  if (attempt >= RECONNECT_DELAYS.length + 12) return
+  const delay = RECONNECT_DELAYS[Math.min(attempt, RECONNECT_DELAYS.length - 1)]
   attempt += 1
   clearTimeout(reconnectTimer)
   reconnectTimer = window.setTimeout(() => {
@@ -177,6 +267,9 @@ function dispatch(ws: WebSocket) {
         .filter(Boolean)
       onServers?.(servers)
       firstReady.resolve()
+    } else if (msg.type === 'chat' && typeof (msg as { id?: unknown }).id === 'string') {
+      currentChat = (msg as { id: string }).id
+      onChat?.(currentChat)
     } else if (msg.type === 'panel' && msg.panel) {
       onPanel?.(msg.panel)
     } else if (msg.type === 'blade' && msg.blade) {
@@ -203,6 +296,25 @@ function dispatch(ws: WebSocket) {
           .then(reply)
           .catch((err) => reply({ error: String(err?.message ?? err) }))
       }
+    } else if (msg.type === 'screen' && msg.id) {
+      const id = msg.id
+      const reply = (payload: Record<string, unknown>) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'reply', id, ...payload }))
+        }
+      }
+      // Answers every time, like the camera: a turn is waiting on it.
+      if (!onScreen) reply({ error: 'The interface has no screen handler.' })
+      else
+        onScreen()
+          .then(reply)
+          .catch((err) => reply({ error: String(err?.message ?? err) }))
+    } else if (msg.type === 'say' && typeof msg.text === 'string') {
+      if (msg.text) onSay?.({ text: msg.text, listen: Boolean(msg.listen), drift: Boolean(msg.drift) })
+    } else if (msg.type === 'brain' && msg.model) {
+      onBrain?.({ model: msg.model, pretty: msg.pretty ?? msg.model })
+    } else if (msg.type === 'focus' && msg.state) {
+      onFocus?.(msg.state)
     } else if (msg.type === 'ui' && msg.op) {
       // A `ui` frame with no args is normal — reset and clear take none — so an
       // absent args object is an empty one, not a reason to drop the command.
@@ -218,7 +330,7 @@ function connect(): Promise<WebSocket> {
   firstReady = deferred()
 
   connecting = new Promise<WebSocket>((resolve, reject) => {
-    const ws = new WebSocket(BRIDGE_WS_URL)
+    const ws = new WebSocket(socketUrl())
     let settled = false
 
     /**

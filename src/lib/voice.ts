@@ -1,6 +1,6 @@
 import { BRIDGE_HTTP_URL } from '../config'
 import { getMic } from './audio'
-import { speakingNow, speakingSince } from './tts'
+import { speakingNow, speakingSince, duckSpeech } from './tts'
 import { startVad, type Vad } from './vad'
 import { caps } from './capabilities'
 
@@ -141,6 +141,8 @@ const TRAILS = /[,;:–—-]$/
  * is also least likely: the user has not yet heard enough to want to stop him.
  */
 const SELF_GUARD_MS = 350
+/** How long he speaks quietly before deciding whether he was really interrupted. */
+const CONFIRM_MS = 650
 
 /**
  * A quiet gap this long with a finished-looking sentence ends the turn.
@@ -294,9 +296,26 @@ const STOP = new Set(
  * mangles its own playback badly enough that a substring match rarely holds,
  * but the *words* survive.
  */
+/**
+ * An override word the USER said — not one he is saying himself.
+ *
+ * "No, sir, the decision is not due yet" contains "no", and the microphone hears
+ * every word he says. Until 6 Oct 2026 any override word bypassed every check,
+ * so on a laptop, where the mic sits beside the speakers, he cut himself off
+ * whenever he said no, wait, enough or hold on. Now a word only overrides when
+ * it is not in what he is saying (or has just said).
+ */
+const OVERRIDE_ALL = new RegExp(OVERRIDE.source, 'gi')
+export function theirOverride(heard: string, spoken: string): boolean {
+  const found = heard.match(OVERRIDE_ALL) ?? []
+  if (!found.length) return false
+  const mine = ` ${norm(spoken)} `
+  return found.some((w) => !mine.includes(` ${norm(w)} `))
+}
+
 function isEcho(heard: string, spoken: string): boolean {
   if (!spoken) return false
-  if (OVERRIDE.test(heard)) return false
+  if (theirOverride(heard, spoken)) return false
 
   const all = norm(heard).split(' ').filter(Boolean)
   if (!all.length) return true
@@ -357,6 +376,10 @@ export const diag = {
   waitedMs: 0,
   /** Barge-ins suppressed because he had only just started the sentence. */
   selfGuarded: 0,
+  /** Times he lowered his voice for something that turned out to be himself. */
+  echoDucks: 0,
+  /** Interruptions confirmed after lowering his voice. */
+  confirmedBarges: 0,
   /** Transcription failures (network, or the bridge speech proxy). */
   restarts: 0,
   /** Milliseconds the last transcription round-trip took. */
@@ -617,6 +640,8 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
   let lastWake = 0
   let lastAlive = Date.now()
   let silenceTimer: ReturnType<typeof setTimeout> | null = null
+  /** A possible interruption, waiting to be confirmed while he speaks quietly. */
+  let confirmTimer: ReturnType<typeof setTimeout> | null = null
 
   /** Same assembly rules as the premium path — a pause is not a full stop. */
   const assemble = makeAssembler({
@@ -638,8 +663,15 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     silenceTimer = null
   }
 
+  const unduck = () => {
+    if (confirmTimer) clearTimeout(confirmTimer)
+    confirmTimer = null
+    duckSpeech(false)
+  }
+
   const reset = () => {
     clearSilence()
+    unduck()
     settled = ''
     interim = ''
     started = false
@@ -681,6 +713,34 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     // Endpoint on a short quiet gap; the ElevenLabs path tunes this more
     // finely, but a fixed window is plenty for the fallback.
     silenceTimer = setTimeout(emit, 900)
+  }
+
+  /**
+   * The moment of decision after lowering his voice. Echo is fleeting — quieter
+   * playback makes it fade, and the recogniser's later results reconcile it with
+   * what he actually said. A person keeps talking. So: whatever has been heard
+   * by now, if it is still not him, he stops and listens; if it is him, he
+   * carries on at full volume and the words are thrown away.
+   */
+  const confirmBarge = () => {
+    confirmTimer = null
+    const mode = h.mode()
+    const full = `${settled} ${interim}`.replace(/\s+/g, ' ').trim()
+    if (!full || mode === 'deaf' || isEcho(full, speakingNow())) {
+      diag.echoDucks++
+      settled = ''
+      interim = ''
+      duckSpeech(false)
+      return
+    }
+    duckSpeech(false)
+    diag.confirmedBarges++
+    started = true
+    if (mode === 'guard') barged = true
+    h.onSpeechStart()
+    const carried = assemble.held()
+    h.onPartial(carried ? `${carried} ${full}` : full)
+    bumpSilence()
   }
 
   const onResult = (e: any) => {
@@ -725,8 +785,9 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       const words = full.split(/\s+/).filter(Boolean).length
       if (mode === 'guard') {
         // An override word cuts through everything below it — "stop" has to
-        // work on the first syllable or it is not a stop button.
-        if (!OVERRIDE.test(full)) {
+        // work on the first syllable or it is not a stop button. But only the
+        // USER's: his own "no" coming back through the speakers is not one.
+        if (!theirOverride(full, speakingNow())) {
           // His own first syllable, same as the premium path. This engine has
           // no energy gate, so without the clock the only defence is the word
           // count below, and a single clear word is exactly what leaks first.
@@ -741,8 +802,18 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
           // audio that includes his own playback, and one word of that is not
           // evidence of anything.
           if (words < 2) return
+          // Still not proof. On a laptop two words are easily his own voice,
+          // misheard. Lower his voice now — so a real interruption is
+          // acknowledged at once, and an echo shrinks — and decide in a moment,
+          // on what has been heard by then.
+          if (!confirmTimer) {
+            duckSpeech(true)
+            confirmTimer = setTimeout(confirmBarge, CONFIRM_MS)
+          }
+          return
         }
       }
+      unduck()
       started = true
       if (mode === 'guard') barged = true
       h.onSpeechStart()
@@ -818,6 +889,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       stopped = true
       clearInterval(health)
       clearSilence()
+      unduck()
       assemble.cancel()
       diag.running = false
       try {

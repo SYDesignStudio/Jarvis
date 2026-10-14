@@ -84,6 +84,22 @@ export function watchCapture(
   if (usingBridge) bridge.watchCapture(fn)
 }
 
+/** Screen frames, spoken lines, brain changes and focus state: bridge-only, like
+ *  the camera, because each one is the bridge talking first. */
+export function watchScreen(fn: () => Promise<bridge.ScreenResult>): void {
+  if (usingBridge) bridge.watchScreen(fn)
+}
+export function watchSay(fn: (s: bridge.SayFrame) => void): void {
+  if (usingBridge) bridge.watchSay(fn)
+}
+export function watchBrain(fn: (b: { model: string; pretty: string }) => void): void {
+  if (usingBridge) bridge.watchBrain(fn)
+}
+export function watchFocus(fn: (f: bridge.FocusState) => void): void {
+  if (usingBridge) bridge.watchFocus(fn)
+}
+export type { FocusState } from './bridge'
+
 /**
  * Barge-in. Stops the answer on both paths and settles whatever `ask()` call
  * is outstanding, so the caller's await always returns — on the bridge by
@@ -123,6 +139,11 @@ export function watchConnection(
   fn: (state: bridge.ConnectionState) => void,
 ): void {
   if (usingBridge) bridge.watchConnection(fn)
+}
+
+/** The chat the page is in, named by the bridge; null on the direct path. */
+export function watchChat(fn: (id: string | null) => void): void {
+  if (usingBridge) bridge.watchChat(fn)
 }
 
 /** Labels for the HUD's SYSTEMS rail. */

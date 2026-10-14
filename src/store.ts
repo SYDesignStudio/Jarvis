@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { FocusState } from './lib/bridge'
 
 export type Phase =
   | 'offline'   // waiting for the click that unlocks audio
@@ -39,9 +40,11 @@ export type Panel = {
 export type Blade = {
   id: string
   title: string
-  kind: 'article' | 'image' | 'gallery' | 'video' | 'embed' | 'markup' | 'camera'
-  /** article / image / video / embed. */
+  kind: 'article' | 'image' | 'gallery' | 'video' | 'embed' | 'markup' | 'camera' | 'document' | 'galaxy' | 'specline' | 'tracker' | 'chats'
+  /** article / image / video / embed; for document, a vetted local/NAS path or a PDF URL. */
   url?: string
+  /** galaxy: what to fly to — a job, optionally with file:/note:/email: fragment. */
+  focus?: string
   /** gallery. */
   images?: string[]
   /** markup — sanitised exactly as a panel body is. */
@@ -240,7 +243,16 @@ type State = {
   expandedBlade: string | null
   /** JARVIS's control over his own appearance. UI_DEFAULTS == the stock look. */
   ui: UiState
+  /** Whether the user's screen is being shared. The frame and pill follow this. */
+  screenShare: boolean
+  /** The model that actually answered last, as reported by the bridge. */
+  brain: { model: string; pretty: string } | null
+  /** The running focus session, booleans and counters only. */
+  focus: FocusState
 
+  setScreenShare: (on: boolean) => void
+  setBrain: (b: { model: string; pretty: string }) => void
+  setFocus: (f: FocusState) => void
   setVoice: (v: string) => void
   setGestures: (on: boolean) => void
   setLooking: (why: string | null) => void
@@ -259,6 +271,11 @@ type State = {
   setError: (e: string | null) => void
   setConnected: (c: string[]) => void
   pushTurn: (t: Turn) => void
+  /** Replace the conversation log — when he carries on an earlier chat. */
+  setTurns: (t: Turn[]) => void
+  /** The chat this page is in, as the bridge names it. */
+  chatId: string | null
+  setChatId: (id: string | null) => void
   appendToLastTurn: (text: string) => void
 
   applyUi: (patch: UiPatch) => void
@@ -287,7 +304,13 @@ export const useStore = create<State>((set) => ({
   expandedBlade: null,
   bootNote: '',
   ui: defaultUi(),
+  screenShare: false,
+  brain: null,
+  focus: { active: false },
 
+  setScreenShare: (screenShare) => set({ screenShare }),
+  setBrain: (brain) => set({ brain }),
+  setFocus: (focus) => set({ focus }),
   setVoice: (voice) => set({ voice }),
   setGestures: (gestures) => set({ gestures }),
   setLooking: (looking) => set({ looking }),
@@ -353,6 +376,9 @@ export const useStore = create<State>((set) => ({
   setError: (error) => set({ error }),
   setConnected: (connected) => set({ connected }),
   pushTurn: (turn) => set((s) => ({ turns: [...s.turns.slice(-40), turn] })),
+  setTurns: (turns) => set({ turns: turns.slice(-40) }),
+  chatId: null,
+  setChatId: (chatId) => set({ chatId }),
   appendToLastTurn: (text) =>
     set((s) => {
       const turns = [...s.turns]

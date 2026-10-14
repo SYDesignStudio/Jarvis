@@ -57,7 +57,24 @@ const paint = (tag, colour) => (line) =>
 
 const children = []
 
-function run(name, command, args, colour, env) {
+/**
+ * The brain can be restarted without anyone at the PC: it exits with this code
+ * when asked to (the Restart button on the page, "restart" on Telegram) and the
+ * launcher starts it again. The face keeps running and the page reconnects —
+ * into the same chat. Any other exit still takes everything down, and a brain
+ * that asks to restart more than five times in ten minutes is left stopped.
+ */
+const RESTART_CODE = 75
+const restarts = []
+const mayRestart = () => {
+  const now = Date.now()
+  while (restarts.length && now - restarts[0] > 10 * 60_000) restarts.shift()
+  if (restarts.length >= 5) return false
+  restarts.push(now)
+  return true
+}
+
+function run(name, command, args, colour, env, respawn = false) {
   const label = paint(name, colour)
   const child = spawn(command, args, {
     env: { ...process.env, ...env },
@@ -66,6 +83,13 @@ function run(name, command, args, colour, env) {
   child.stdout.on('data', (d) => process.stdout.write(label(d) + '\n'))
   child.stderr.on('data', (d) => process.stderr.write(label(d) + '\n'))
   child.on('exit', (code) => {
+    const i = children.indexOf(child)
+    if (i >= 0) children.splice(i, 1)
+    if (respawn && code === RESTART_CODE && !stopping && mayRestart()) {
+      console.log(`\x1b[${colour}m${name}\x1b[0m restarting on request…`)
+      run(name, command, args, colour, env, respawn)
+      return
+    }
     // If either half dies the other is useless, so take the whole thing down
     // rather than leave a half-running app that looks alive but cannot answer.
     console.log(`\x1b[${colour}m${name}\x1b[0m exited (${code}); stopping the rest.`)
@@ -105,7 +129,7 @@ process.on('SIGTERM', () => shutdown(0))
  * without widening what the bridge trusts by default.
  */
 const port = process.env.PORT
-const bridgeEnv = writes ? { JARVIS_ALLOW_WRITES: '1' } : {}
+const bridgeEnv = { JARVIS_SUPERVISED: '1', ...(writes ? { JARVIS_ALLOW_WRITES: '1' } : {}) }
 if (port) {
   bridgeEnv.JARVIS_ALLOWED_ORIGINS = `http://localhost:${port},http://127.0.0.1:${port}`
   console.log(`  serving the face on port ${port}; the bridge will accept it.\n`)
@@ -114,7 +138,7 @@ if (port) {
 vendorWasm()
 
 console.log('\nJ.A.R.V.I.S. starting — the brain and the face.\n')
-run('bridge', 'node', ['bridge/server.mjs'], '36', bridgeEnv)
+run('bridge', 'node', ['bridge/server.mjs'], '36', bridgeEnv, true)
 // npm is a shell script on most systems; call the vite binary directly so we do
 // not need shell:true (which would break the argument handling above).
 run('face', process.execPath, ['node_modules/vite/bin/vite.js'], '35', {})

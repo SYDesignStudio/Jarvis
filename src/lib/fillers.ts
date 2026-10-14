@@ -48,6 +48,14 @@ const ATTENTION = [
   'Awake, sir.',
 ]
 
+/** Being dismissed — "thank you, Jarvis" — just before he stands down. */
+const DISMISSED = [
+  'Very good, sir.',
+  'Sir.',
+  'Standing down.',
+  'Until next time, sir.',
+]
+
 /**
  * Avoids repeating the same phrase twice running, which is what makes canned
  * lines sound canned. Keeps one slot of history per pool.
@@ -66,6 +74,7 @@ function makePicker(pool: string[]) {
 export const working = makePicker(WORKING)
 export const acknowledge = makePicker(ACKNOWLEDGE)
 export const attention = makePicker(ATTENTION)
+export const dismissed = makePicker(DISMISSED)
 
 /**
  * Naming the task is warmer than a generic acknowledgement and shows the

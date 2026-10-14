@@ -5,6 +5,11 @@ import { BRIDGE_HTTP_URL } from '../config'
 import { sanitisePanelHtml } from './sanitise'
 import { frameSpan, peaceScroll, pinchCount } from '../lib/hands'
 import * as camera from '../lib/camera'
+import { PdfView } from './PdfView'
+import { Galaxy } from './Galaxy'
+import { SpeclineDash } from './SpeclineDash'
+import { TrackerDash } from './TrackerDash'
+import { ChatsDash } from './ChatsDash'
 
 /**
  * The blades.
@@ -157,8 +162,24 @@ const CameraView = memo(function CameraView() {
   return <video ref={el} className="bl-camera" autoPlay playsInline muted />
 })
 
+/** Where the document blade reads its PDF: a vetted local or NAS path, or a PDF on the web. */
+const docUrl = (raw: string) =>
+  /^https?:\/\//i.test(raw)
+    ? `${BRIDGE_HTTP_URL}/doc?url=${encodeURIComponent(raw)}`
+    : `${BRIDGE_HTTP_URL}/doc?path=${encodeURIComponent(raw)}`
+
 const Body = memo(function Body({ blade }: { blade: Blade }) {
   if (blade.kind === 'camera') return <CameraView />
+
+  if (blade.kind === 'document' && blade.url) return <PdfView src={docUrl(blade.url)} title={blade.title} />
+
+  if (blade.kind === 'galaxy') return <Galaxy focus={blade.focus} />
+
+  if (blade.kind === 'specline') return <SpeclineDash />
+
+  if (blade.kind === 'tracker') return <TrackerDash />
+
+  if (blade.kind === 'chats') return <ChatsDash />
 
   if (blade.kind === 'article' && blade.url) {
     return (
@@ -626,10 +647,11 @@ export function Blades() {
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return
 
-      if (e.key === 'e') {
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
+      if (key === 'e') {
         e.preventDefault()
         expandBlade(expandedBlade ? null : (front?.id ?? null))
-      } else if (e.key === 'x') {
+      } else if (key === 'x') {
         e.preventDefault()
         if (front) closeBlade(front.id)
       } else if (e.key === ']') {

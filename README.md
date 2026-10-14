@@ -199,9 +199,84 @@ chose.
 | **Space** | Talk without the wake word |
 | Just speak | Interrupt him mid-sentence (barge-in) |
 | **V** | Cycle the browser voice |
+| **"Thank you, Jarvis"** | He acknowledges and stands down (also "that will be all", "stand down", "goodnight") |
 | **Escape** | Stand down |
 | **D** | Live diagnostics panel |
 | **T** | One-line audio self-test |
+| **S** | Share your screen (pick Entire screen) or stop sharing |
+| **F** | Start a 30-minute focus session and open the desk card |
+| **"What do you think of this?"** | While sharing: he looks at your screen, now |
+| **"Remember that…"** | Written to `JOBS.md` under *Captured* ("note to self", "don't let me forget", "log this") |
+| **"Switch to Opus"** | Swap brains mid-conversation — Sonnet 5, Opus 5.5 or Fable 5.1 only; anything else is refused |
+| **"Thirty minutes on the drawings"** | Focus session by voice; then "lock on this tab", "pause", "give me fifteen seconds", "it's okay, I'm doing research", "call me out every thirty seconds", "how long left" |
+
+---
+
+## Screen, memory, brains and focus
+
+**Screen.** Press **S** and choose *Entire screen*. A red frame round the window
+says it is live. He captures one frame at the moment you ask and never answers
+from an earlier one. While sharing, if the screen sits unchanged for four
+minutes he offers one dry nudge, then leaves you alone for ten. The diffing
+behind that is local; no frame leaves the machine until he actually looks.
+
+**Remember that.** Captures are dated lines in `JOBS.md` under *Captured*, so
+they sit in the list you already read, and he can answer from them on the next
+question. A failed write is said out loud, never swallowed.
+
+**Remind me / put in my diary.** A dated line under *Diary* in `JOBS.md`, and
+for reminders a nudge on Telegram and at the desk when the time comes
+(`data/reminders.json` survives restarts). Works from the desk, Telegram and
+voice notes: "remind me to chase Ian tomorrow at ten".
+
+**Reading email.** `list_mail` and `read_mail` read the configured inboxes
+directly over IMAP — one line per message — so "what's new in the salman
+inbox" is a few seconds, not a bulk download. Read-only: there is no send or
+reply from JARVIS.
+
+**Brain swap.** Names are matched exactly or refused: "Opus 5" is not rounded to
+Opus 5.5. Swaps last for the conversation; a restart returns to `JARVIS_MODEL`.
+The chip under the status line shows the model that actually answered.
+
+**Focus sessions.** The timer lives in the bridge, so a reloaded tab rejoins it.
+A small PowerShell reader checks the front window and Chrome's address bar once a
+second. Say "thirty minutes on this" from your work and he locks there; start
+from the JARVIS tab (or **F**) and he waits for you to land somewhere before
+locking. Drift past eight seconds and he names it — "Sir, Instagram can wait" —
+then again every minute while it lasts, escalating. The name is spoken and
+never stored: session state, the page, and the ledger (`data/focus-ledger.json`,
+aggregates only) hold booleans and counters, and a test proves it. The desk card
+is Chrome's always-on-top mini window: a ring that depletes, cyan on target,
+amber adrift, with *Lock this tab*, *Pause* and *End session*.
+
+**Telegram, the inbox and the phone.** Set the variables in `.env.example`'s
+"Beyond the desk" block and the bridge grows three more surfaces:
+
+- *Telegram* — message the bot and it is JARVIS, same brain, same memory; he
+  messages you back. Only your chat id is answered; anyone else is ignored.
+  Send a **voice note** and he transcribes it (Fish Audio or ElevenLabs),
+  answers, and replies with the words and a voice note in his own voice.
+- *The inbox* — checked every five minutes over IMAP. Free rules decide what
+  matters: a client named in `JOBS.md`, a council address, a job address in the
+  subject, or the words that mean money or trouble (enforcement, refused,
+  invoice, deadline…). Only those get a short model summary and a Telegram
+  message; the desk hears it too if a page is open. Everything else costs
+  nothing and is never mentioned.
+- *The phone* — an **urgent** email (enforcement, refusal, deadline, from a
+  council or a client) rings your mobile between 8am and 9pm. The voice is a
+  Retell-hosted agent that knows only that one message: it reads it, answers
+  questions about it, takes your reply and hangs up. It has no tools and no
+  route into this machine — by design, the phone network never reaches the
+  bridge. Every call ends with a receipt on Telegram: answered and for how
+  long, or not answered and why.
+
+`npm run preflight -- --notify` sends a test Telegram message; `--call` rings
+you with a test message (a real call, a few pence).
+
+**Preflight.** `npm run preflight` checks every live chain against the running
+system — including that the bridge is newer than its own files, that the answer
+came from the configured model, and that `.env.local` cannot be read from the
+browser. `npm test` runs the logic tests. A change is done when preflight passes.
 
 ---
 
@@ -231,8 +306,14 @@ Everything is optional in bridge mode. Frontend settings live in `.env.local`
 | `JARVIS_ALLOWED_ORIGINS` | local dev | Extra WebSocket origins to accept |
 | `JARVIS_ALLOW_NO_ORIGIN` | off | Accept connections with no `Origin` header |
 | `JARVIS_FILE_ROOTS` | — | Roots the `/file` endpoint may serve from |
+| `FISH_AUDIO_API_KEY` | — | Optional; speaks through Fish Audio (takes precedence over ElevenLabs for the voice) |
+| `JARVIS_FISH_VOICE_ID` | Jarvis (MCU) | Fish Audio reference voice id |
+| `JARVIS_FISH_STT` | off | `1` transcribes the mic with Fish Audio (needs API credit) |
 | `JARVIS_VOICE_ID` | — | ElevenLabs voice id |
 | `ELEVENLABS_API_KEY` | — | Optional; enables the ElevenLabs voice + Scribe |
+
+Bridge variables are read from `.env.local` at boot (a real environment variable
+of the same name wins).
 
 ### Frontend (`.env.local`)
 

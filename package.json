@@ -16,10 +16,12 @@
     "preview": "vite preview",
     "bridge": "node bridge/server.mjs",
     "bridge:writes": "JARVIS_ALLOW_WRITES=1 node bridge/server.mjs",
-    "setup": "node scripts/setup.mjs"
+    "setup": "node scripts/setup.mjs",
+    "preflight": "node scripts/preflight.mjs",
+    "test": "node scripts/test-focus.mjs && node scripts/test-units.mjs && node scripts/test-surfaces.mjs && node scripts/test-research.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.220",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.283",
     "@anthropic-ai/sdk": "^0.115.0",
     "@mediapipe/tasks-vision": "^1.0.1",
     "@picovoice/porcupine-web": "^4.0.1",
@@ -29,10 +31,16 @@
     "@react-three/postprocessing": "^3.0.4",
     "dompurify": "^3.4.12",
     "framer-motion": "^12.43.0",
+    "imapflow": "^2.1.0",
     "kokoro-js": "^1.2.1",
+    "mailparser": "^3.9.29",
+    "nodemailer": "^7.0.13",
+    "pdfjs-dist": "^6.3.289",
+    "playwright-core": "^1.63.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "three": "^0.185.1",
+    "tsdav": "^2.3.4",
     "ws": "^8.21.1",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"

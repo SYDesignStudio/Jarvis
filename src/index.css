@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;600&family=JetBrains+Mono:wght@300;400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@300;400&display=swap');
 
 :root {
   /* The interface cyan. `--accent` is re-declared per phase and per panel;
@@ -1717,6 +1717,341 @@ kbd {
   padding: 1px 4px;
 }
 
+/* A PDF: pages drawn on canvases inside the blade body, so the wheel and the
+   two-finger gesture scroll them. The bar sticks to the top of the body. */
+.bl-pdf {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.bl-pdf-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 12px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  background: color-mix(in srgb, var(--accent) 7%, rgba(2, 10, 12, 0.88));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
+  backdrop-filter: blur(6px);
+}
+.bl-pdf-meta { opacity: 0.7; flex: 1 1 auto }
+.bl-pdf-zoom { display: inline-flex; gap: 4px }
+.bl-pdf-zoom button,
+.bl-pdf-open {
+  min-width: 30px;
+  padding: 3px 9px;
+  font: inherit;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 3px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.bl-pdf-zoom button:hover,
+.bl-pdf-open:hover,
+.bl-pdf-zoom button.on { background: color-mix(in srgb, var(--accent) 16%, transparent) }
+.bl-pdf-zoom button:focus-visible,
+.bl-pdf-open:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px }
+.bl-pdf-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+}
+.bl-pdf-page {
+  position: relative;
+  flex: none;
+  /* Paper stays paper: drawings are black line-work on white, whatever the HUD tint. */
+  background: #fff;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent), 0 6px 26px rgba(0, 0, 0, 0.5);
+}
+.bl-pdf-page canvas { display: block }
+.bl-pdf-num {
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  padding: 1px 6px;
+  font-size: 10px;
+  color: #2f3336;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 2px;
+}
+
+/* The memory galaxy: a star map of every job, drawn inside a blade. */
+.bl-galaxy {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #020a0c;
+}
+.bl-galaxy canvas { display: block }
+.gx-note {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  opacity: 0.6;
+}
+.gx-label {
+  pointer-events: none;
+  white-space: nowrap;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  letter-spacing: 0.06em;
+  color: #e8f6f8;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.95), 0 0 2px rgba(0, 0, 0, 0.95);
+}
+.gx-label b { color: var(--accent); font-weight: 600 }
+.gx-label .gx-dim { opacity: 0.6 }
+.gx-arm {
+  pointer-events: none;
+  white-space: nowrap;
+  text-align: center;
+  font-family: 'Chakra Petch', system-ui, sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.95);
+  transition: opacity 0.6s;
+}
+.gx-arm small {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: none;
+  opacity: 0.7;
+}
+.gx-card {
+  position: absolute;
+  left: 18px;
+  top: 18px;
+  width: 350px;
+  max-height: calc(100% - 36px);
+  overflow: auto;
+  padding: 14px 16px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #dfeff2;
+  background: color-mix(in srgb, var(--accent) 6%, rgba(2, 10, 12, 0.84));
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  box-shadow: 0 0 40px color-mix(in srgb, var(--accent) 12%, transparent);
+  backdrop-filter: blur(8px);
+}
+.gx-card h3 {
+  margin: 0;
+  font-family: 'Chakra Petch', system-ui, sans-serif;
+  font-size: 20px;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+}
+.gx-card .gx-sub { opacity: 0.78; margin: 2px 0 8px }
+.gx-card h4 {
+  margin: 14px 0 4px;
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+.gx-card ul { list-style: none; margin: 0; padding: 0 }
+.gx-card li { border-top: 1px solid color-mix(in srgb, var(--accent) 14%, transparent) }
+.gx-card li button {
+  all: unset;
+  display: block;
+  width: 100%;
+  padding: 5px 0;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.gx-card li button:hover, .gx-card li.on button { color: var(--accent) }
+.gx-card li button:focus-visible, .gx-open:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px }
+.gx-card .gx-date { opacity: 0.55; margin-right: 8px }
+.gx-card .gx-src { display: block; opacity: 0.55; font-size: 10.5px }
+.gx-picked {
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.gx-open {
+  all: unset;
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 9px;
+  cursor: pointer;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 3px;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.gx-open:hover { background: color-mix(in srgb, var(--accent) 16%, transparent) }
+.gx-legend {
+  position: absolute;
+  right: 18px;
+  bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 14px;
+  max-width: 62%;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.gx-legend span::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 8px var(--c);
+}
+.gx-legend .gx-ring::before { background: transparent; border: 1.5px solid #dfeff2; box-shadow: none }
+.gx-hint {
+  position: absolute;
+  left: 18px;
+  bottom: 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  opacity: 0.5;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gx-card { backdrop-filter: none }
+  .gx-arm { transition: none }
+}
+
+/* The command line: type to JARVIS, hand him files. A hairline above the hint
+   strip until it has focus or content; then a lit prompt. */
+.con {
+  position: absolute;
+  left: 50%;
+  bottom: 70px;
+  z-index: 30;
+  width: min(720px, calc(100% - 32px));
+  transform: translateX(-50%);
+  padding: 6px 10px 6px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  color: #dfeff2;
+  background: rgba(2, 10, 12, 0.55);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 4px;
+  opacity: 0.55;
+  transition: opacity 0.25s, border-color 0.25s, box-shadow 0.25s, background 0.25s;
+}
+.con.live {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 5%, rgba(2, 10, 12, 0.86));
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 28px color-mix(in srgb, var(--accent) 16%, transparent);
+  backdrop-filter: blur(8px);
+}
+.con-row { display: flex; align-items: flex-end; gap: 8px }
+.con-prompt {
+  color: var(--accent);
+  font-size: 18px;
+  line-height: 22px;
+  padding-bottom: 5px;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.con-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  resize: none;
+  padding: 5px 0;
+  font: inherit;
+  line-height: 22px;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  outline: none;
+  caret-color: var(--accent);
+}
+.con-input::placeholder { color: color-mix(in srgb, #dfeff2 55%, transparent); letter-spacing: 0.04em }
+.con-clip, .con-send {
+  all: unset;
+  cursor: pointer;
+  padding: 4px 9px;
+  margin-bottom: 3px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 3px;
+}
+.con-clip { font-size: 15px; padding: 2px 8px; line-height: 20px }
+.con-clip:hover, .con-send:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 16%, transparent) }
+.con-send:disabled { opacity: 0.35; cursor: default }
+.con-clip:focus-visible, .con-send:focus-visible, .con-chip button:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px }
+.con-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0 8px 2px }
+.con-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px 3px 9px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #e8f6f8;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-left-width: 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.con-chip i { font-style: normal; opacity: 0.55; font-size: 10px }
+.con-chip button { all: unset; cursor: pointer; padding: 0 3px; color: var(--accent); font-size: 14px; line-height: 1 }
+.con-status { padding: 6px 0 0 24px; font-size: 10.5px; letter-spacing: 0.1em; opacity: 0.7 }
+.con-status.err { color: #ff6b6b; opacity: 1 }
+.con-drop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 10, 12, 0.6);
+  pointer-events: none;
+}
+.con-drop-frame {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  width: min(560px, 80vw);
+  height: 220px;
+  font-family: 'Chakra Petch', system-ui, sans-serif;
+  font-size: 22px;
+  letter-spacing: 0.3em;
+  color: var(--accent);
+  border: 1px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  border-radius: 6px;
+  box-shadow: 0 0 60px color-mix(in srgb, var(--accent) 18%, transparent), inset 0 0 60px color-mix(in srgb, var(--accent) 6%, transparent);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+.con-drop-frame small { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.18em; opacity: 0.7 }
+@media (prefers-reduced-motion: reduce) {
+  .con { transition: none }
+  .con.live { backdrop-filter: none }
+}
+
 /* The body scrollbar inside a blade, matched to the reader view's own. */
 .bl-body::-webkit-scrollbar { width: 9px }
 .bl-body::-webkit-scrollbar-thumb {
@@ -1870,6 +2205,88 @@ kbd {
   .hands-live::before { animation: none }
 }
 
+/* ------------------------------------------------------ status chips */
+
+/* The status line gains two readouts beneath it: the brain that actually
+   answered, and a running focus session. Quiet on purpose — mono digits,
+   no fill — so the reactor stays the loudest thing on screen. */
+.status-stack {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+}
+.chip {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  transition: color 500ms ease;
+}
+.chip-key { opacity: 0.62; }
+.chip-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--accent) 88%, white);
+}
+.chip-note { opacity: 0.7; }
+.chip-focus.is-adrift { color: #ffb547; }
+.chip-focus.is-adrift .chip-val { color: #ffcf85; }
+
+/* ------------------------------------------------------ screen share */
+
+/* The recording border. Inset from the true edge so it reads as a frame on
+   the glass rather than a browser outline, and red rather than the accent
+   because it must not blend into a theme JARVIS has just applied. */
+.share-frame {
+  position: fixed;
+  inset: 6px;
+  z-index: 97;
+  border: 2px solid rgba(255, 77, 77, 0.85);
+  box-shadow: 0 0 18px rgba(255, 77, 77, 0.35), inset 0 0 18px rgba(255, 77, 77, 0.18);
+  pointer-events: none;
+}
+.share-live {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 98;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: #ffd6d6;
+  border: 1px solid rgba(255, 77, 77, 0.55);
+  background: rgba(40, 6, 8, 0.85);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+/* Below the camera pill when both are live, never on top of it. */
+.share-live.is-lower { top: 44px; }
+.share-live::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff4d4d;
+  box-shadow: 0 0 8px #ff4d4d;
+  animation: handsPulse 1.6s ease-in-out infinite;
+}
+.share-live kbd {
+  font: inherit;
+  border: 1px solid rgba(255, 77, 77, 0.55);
+  padding: 0 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .share-live::before { animation: none }
+}
+
 /* Spun in CSS, deliberately. Under framer this was an infinitely repeating
    animation, and AnimatePresence will not unmount a subtree whose animations
    never end — which left the whole ignition overlay on top of the interface
@@ -1896,3 +2313,308 @@ kbd {
   transform: scaleX(-1);
   background: #000;
 }
+
+/* ------------------------------------------------------ Specline dashboard
+   Specline's identity, not the HUD's: petrol on drafting ink, IBM Plex, the
+   figures in mono. The tokens are scoped to .sl so nothing leaks either way. */
+.sl {
+  --sl-ink: #0c151a;
+  --sl-paper: #f4f3f0;
+  --sl-petrol: #3fa6be;
+  --sl-line: rgba(244, 243, 240, 0.13);
+  --sl-dim: rgba(244, 243, 240, 0.56);
+  --sl-hold: #e0a646;
+  --sl-fail: #e8705c;
+  --sl-pass: #74c69a;
+  min-height: 100%;
+  padding: 22px 26px 18px;
+  background: var(--sl-ink);
+  color: var(--sl-paper);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.sl-empty, .sl-quiet { color: var(--sl-dim); margin: 6px 0 0 }
+.sl-empty { padding: 40px 0; font-size: 15px }
+.sl-stale { margin: 10px 0 0; color: var(--sl-hold); font-size: 12px }
+.sl-dim { color: var(--sl-dim) }
+.sl-block { display: block }
+.sl-hold { color: var(--sl-hold) }
+.sl-fail { color: var(--sl-fail) }
+.sl-pass { color: var(--sl-pass) }
+.sl-mono, .sl-when, .sl-num, .sl-table td.r, .sl-table th.r { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums }
+
+.sl-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 1px solid var(--sl-line) }
+/* The bracket mark, drawn: a petrol tile holding two square brackets. */
+.sl-mark { position: relative; width: 34px; height: 34px; flex: none; border-radius: 6px; background: #0e6e85 }
+.sl-mark::before, .sl-mark::after { content: ''; position: absolute; top: 8px; bottom: 8px; width: 7px; border: 2.5px solid #fbfaf8 }
+.sl-mark::before { left: 8px; border-right: 0 }
+.sl-mark::after { right: 8px; border-left: 0 }
+.sl-name b { display: block; font-family: 'IBM Plex Sans Condensed', sans-serif; font-weight: 600; font-size: 19px; letter-spacing: 0.2em; text-transform: uppercase }
+.sl-name span { color: var(--sl-dim); font-size: 12px }
+.sl-switches { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-left: auto }
+.sl-sw { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px }
+.sl-sw i { display: block; font: 600 10px 'IBM Plex Sans Condensed', sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: var(--sl-dim) }
+.sl-refresh {
+  font: 600 11px 'IBM Plex Sans Condensed', sans-serif; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--sl-paper); background: transparent; border: 1px solid var(--sl-line); border-radius: 4px; padding: 7px 12px; cursor: pointer;
+}
+.sl-refresh:hover:not(:disabled) { border-color: var(--sl-petrol); color: var(--sl-petrol) }
+.sl-refresh:focus-visible { outline: 2px solid var(--sl-petrol); outline-offset: 2px }
+.sl-refresh:disabled { opacity: 0.55; cursor: default }
+
+/* The headline figures, each held in the bracket mark. */
+.sl-figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 18px 22px; padding: 22px 0 18px }
+.sl-fig { display: grid; grid-template-columns: auto 1fr; column-gap: 12px; align-items: center }
+.sl-num {
+  grid-row: span 2; position: relative; min-width: 62px; padding: 6px 14px; text-align: center;
+  font-size: 30px; font-weight: 500; line-height: 1.15; color: var(--sl-paper);
+}
+.sl-num::before, .sl-num::after { content: ''; position: absolute; top: 0; bottom: 0; width: 8px; border: 2px solid var(--sl-petrol) }
+.sl-num::before { left: 0; border-right: 0 }
+.sl-num::after { right: 0; border-left: 0 }
+.sl-lab { align-self: end; font: 600 11px 'IBM Plex Sans Condensed', sans-serif; letter-spacing: 0.13em; text-transform: uppercase }
+.sl-sub { align-self: start; color: var(--sl-dim); font-size: 11.5px }
+
+.sl-founding { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 0; border-top: 1px solid var(--sl-line); border-bottom: 1px solid var(--sl-line) }
+.sl-places { display: flex; gap: 3px; flex-wrap: wrap }
+.sl-places i { width: 9px; height: 14px; border: 1px solid var(--sl-line); border-radius: 1px }
+.sl-places i.on { background: var(--sl-petrol); border-color: var(--sl-petrol) }
+
+.sl-h { margin: 0 0 8px; font: 600 11px 'IBM Plex Sans Condensed', sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: var(--sl-petrol) }
+.sl-h span { color: var(--sl-dim); font-family: 'IBM Plex Mono', monospace; letter-spacing: 0; margin-left: 6px }
+.sl-founding .sl-h { margin: 0 }
+.sl-cols { display: grid; grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.5fr); gap: 34px; padding-top: 20px }
+.sl-col > section, .sl-pair > section { margin-bottom: 24px }
+.sl-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 28px }
+
+.sl ul { list-style: none; margin: 0; padding: 0 }
+.sl-need li { padding: 7px 0 7px 12px; border-left: 2px solid currentColor; margin-bottom: 6px; font-size: 13.5px }
+.sl-need li.sl-hold, .sl-need li.sl-fail { color: var(--sl-paper) }
+.sl-need li.sl-hold { border-left-color: var(--sl-hold) }
+.sl-need li.sl-fail { border-left-color: var(--sl-fail) }
+.sl-msgs li { padding: 10px 0; border-top: 1px solid var(--sl-line) }
+.sl-row { display: flex; align-items: baseline; gap: 8px }
+.sl-row .sl-when { margin-left: auto; color: var(--sl-dim); font-size: 11.5px }
+.sl-subj { margin: 2px 0; font-weight: 500 }
+.sl-body { margin: 0 0 4px; color: var(--sl-dim); white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden }
+.sl-msgs .sl-dim { margin: 0; font-size: 11.5px }
+.sl-tag { display: inline-block; margin-left: 7px; padding: 0 5px; border: 1px solid currentColor; border-radius: 2px; font: 600 9.5px/15px 'IBM Plex Sans Condensed', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sl-dim); vertical-align: 1px }
+.sl-tag.sl-hold { color: var(--sl-hold) }
+.sl-tag.sl-fail { color: var(--sl-fail) }
+.sl-feed li { display: grid; grid-template-columns: 52px auto 1fr; gap: 8px; align-items: baseline; padding: 5px 0; border-top: 1px solid var(--sl-line) }
+.sl-feed .sl-when { color: var(--sl-dim); font-size: 11.5px }
+.sl-feed b { font-weight: 500; white-space: nowrap }
+.sl-feed .sl-dim { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px }
+
+.sl-table { width: 100%; border-collapse: collapse }
+.sl-table th { text-align: left; padding: 0 10px 6px 0; font: 600 10px 'IBM Plex Sans Condensed', sans-serif; letter-spacing: 0.13em; text-transform: uppercase; color: var(--sl-dim); border-bottom: 1px solid var(--sl-line) }
+.sl-table td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--sl-line); vertical-align: top }
+.sl-table .r { text-align: right; padding-right: 0; padding-left: 10px; white-space: nowrap }
+.sl-foot { margin: 4px 0 0; padding-top: 12px; border-top: 1px solid var(--sl-line); color: var(--sl-dim); font-size: 12px }
+
+@media (max-width: 900px) {
+  .sl { padding: 16px }
+  .sl-cols, .sl-pair { grid-template-columns: 1fr; gap: 0 }
+  .sl-switches { margin-left: 0; width: 100% }
+}
+
+/* -------------------------------------------------------- Planning tracker
+   A working list in the HUD's own voice: cyan on ink, mono for dates. Sentence
+   case and a readable size, because it is read and clicked, not glanced at. */
+.tk {
+  --tk-ink: #030c12;
+  --tk-text: #d9f3f8;
+  --tk-dim: rgba(217, 243, 248, 0.58);
+  --tk-line: rgba(0, 229, 255, 0.16);
+  --tk-cy: #00e5ff;
+  --tk-hold: #ffb547;
+  --tk-fail: #ff6b5e;
+  --tk-pass: #5fe3a1;
+  min-height: 100%;
+  padding: 20px 24px 16px;
+  background: var(--tk-ink);
+  color: var(--tk-text);
+  font: 400 14px/1.45 'Chakra Petch', system-ui, sans-serif;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+.tk button, .tk input, .tk select { font: inherit; color: inherit }
+.tk :focus-visible { outline: 2px solid var(--tk-cy); outline-offset: 2px }
+.tk-hold { color: var(--tk-hold) }
+.tk-fail { color: var(--tk-fail) }
+.tk-pass { color: var(--tk-pass) }
+.tk-empty, .tk-quiet { color: var(--tk-dim); margin: 18px 0 }
+.tk-err { margin: 10px 0 0; color: var(--tk-fail) }
+.tk-foot { margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--tk-line); color: var(--tk-dim); font-size: 12px }
+
+.tk-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap }
+.tk-top h2 { margin: 0 auto 0 0; font-size: 18px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--tk-cy) }
+.tk-find { width: min(320px, 100%); padding: 8px 12px; background: rgba(0, 229, 255, 0.05); border: 1px solid var(--tk-line); border-radius: 3px }
+.tk-find::placeholder, .tk input::placeholder { color: var(--tk-dim) }
+.tk-btn { padding: 7px 12px; background: transparent; border: 1px solid var(--tk-line); border-radius: 3px; cursor: pointer; white-space: nowrap }
+.tk-btn:hover { border-color: var(--tk-cy); color: var(--tk-cy) }
+.tk-primary { background: rgba(0, 229, 255, 0.14); border-color: var(--tk-cy) }
+.tk-mini { margin-left: 10px; padding: 2px 9px; font-size: 12px; background: transparent; border: 1px solid currentColor; border-radius: 3px; cursor: pointer; color: var(--tk-text) }
+.tk-mini:hover { color: var(--tk-cy) }
+
+.tk-piles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 16px 0 6px }
+.tk-pile { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; text-align: left; background: transparent; border: 1px solid var(--tk-line); border-radius: 3px; cursor: pointer; color: var(--tk-dim); font-size: 12.5px }
+.tk-pile b { font: 400 26px/1 'JetBrains Mono', monospace; color: var(--tk-text) }
+.tk-pile:hover { border-color: var(--tk-cy) }
+.tk-pile.on { border-color: var(--tk-cy); background: rgba(0, 229, 255, 0.1); color: var(--tk-text) }
+.tk-pile.hot b { color: var(--tk-hold) }
+
+.tk-list, .tk-flags, .tk-todo, .tk-hist { list-style: none; margin: 0; padding: 0 }
+.tk-row { border-bottom: 1px solid var(--tk-line) }
+.tk-row.open { background: rgba(0, 229, 255, 0.035) }
+.tk-head { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) 22px; gap: 22px; align-items: center; width: 100%; padding: 13px 6px 11px; background: transparent; border: 0; text-align: left; cursor: pointer }
+.tk-head:hover .tk-site b { color: var(--tk-cy) }
+.tk-site b { display: block; font-weight: 600; font-size: 15px }
+.tk-site span { display: block; color: var(--tk-dim); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.tk-stand { display: block; font-size: 13px; margin-bottom: 7px }
+.tk-chev { font: 400 18px/1 'JetBrains Mono', monospace; color: var(--tk-dim); text-align: center }
+
+/* The determination track. */
+.tk-track { position: relative; height: 26px }
+.tk-track-none { height: auto; color: var(--tk-dim); font-size: 12px }
+.tk-track i, .tk-track b { position: absolute; top: 5px }
+.tk-rail { left: 0; right: 0; height: 2px; background: var(--tk-line) }
+.tk-run { left: 0; height: 2px; background: var(--tk-cy) }
+.tk-late { height: 2px; background: var(--tk-fail) }
+.tk-dot { width: 8px; height: 8px; margin: -3px 0 0 -4px; border-radius: 50%; background: var(--tk-ink); border: 2px solid var(--tk-cy) }
+.tk-dot.tk-valid { background: var(--tk-cy) }
+.tk-end { width: 2px; height: 12px; margin: -5px 0 0 -1px; background: var(--tk-text) }
+.tk-end.tk-approx { background: repeating-linear-gradient(to bottom, var(--tk-text) 0 3px, transparent 3px 5px) }
+.tk-now { width: 0; height: 0; margin: -9px 0 0 -4px; border: 4px solid transparent; border-top: 6px solid var(--tk-hold) }
+.tk-over .tk-now { border-top-color: var(--tk-fail) }
+.tk-cap { position: absolute; top: 12px; font: 400 10.5px/1.3 'JetBrains Mono', monospace; color: var(--tk-dim); white-space: nowrap }
+.tk-cap-end { transform: translateX(-100%); padding-right: 5px }
+
+.tk-flags { padding: 0 6px 10px 6px }
+.tk-flags li { display: flex; align-items: center; padding: 5px 0 5px 12px; border-left: 2px solid currentColor; margin-bottom: 4px; font-size: 13.5px }
+.tk-flags li > span, .tk-flags label span, .tk-todo label span { color: var(--tk-text) }
+.tk label { cursor: pointer }
+.tk-flags label, .tk-todo label { display: flex; align-items: flex-start; gap: 9px }
+.tk input[type='checkbox'] { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--tk-cy); flex: none; cursor: pointer }
+.tk em { font-style: normal; color: var(--tk-dim) }
+
+.tk-detail { display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 26px; padding: 6px 6px 18px; border-top: 1px dashed var(--tk-line) }
+.tk-detail h3, .tk-add label, .tk-fields label { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--tk-dim) }
+.tk-detail h3 { margin: 12px 0 8px; color: var(--tk-cy) }
+.tk-fields, .tk-add { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px }
+.tk-fields label, .tk-add label { display: flex; flex-direction: column; gap: 4px }
+.tk-fields input, .tk-fields select, .tk-add input, .tk-add select, .tk-new input {
+  padding: 6px 8px; background: rgba(0, 229, 255, 0.05); border: 1px solid var(--tk-line); border-radius: 3px;
+  font: 400 13px 'JetBrains Mono', monospace; letter-spacing: 0; text-transform: none; color: var(--tk-text); color-scheme: dark; min-width: 0;
+}
+.tk-fields select option, .tk-add select option { background: #06141b }
+.tk-facts { margin: 10px 0; color: var(--tk-dim); font-size: 12.5px }
+.tk-acts { display: flex; flex-wrap: wrap; gap: 8px }
+.tk-todo li { padding: 5px 0 }
+.tk-todo li.done span { color: var(--tk-dim); text-decoration: line-through }
+.tk-new { display: grid; grid-template-columns: 1fr auto; gap: 6px; margin-top: 8px }
+.tk-new input:first-child { grid-column: 1 / -1 }
+.tk-hist li { display: grid; grid-template-columns: 62px 1fr; gap: 8px; padding: 4px 0; font-size: 12.5px; border-top: 1px solid var(--tk-line) }
+.tk-hist time { font: 400 11px/1.6 'JetBrains Mono', monospace; color: var(--tk-dim) }
+.tk-add { grid-template-columns: repeat(3, 1fr); align-items: end; margin-top: 14px; padding: 14px; border: 1px solid var(--tk-line); border-radius: 3px }
+.tk-add .wide { grid-column: span 2 }
+
+@media (max-width: 1000px) {
+  .tk-piles { grid-template-columns: repeat(3, 1fr) }
+  .tk-head { grid-template-columns: 1fr 22px }
+  .tk-where { grid-column: 1 / -1; grid-row: 2 }
+  .tk-detail, .tk-add { grid-template-columns: 1fr }
+  .tk-add .wide { grid-column: auto }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tk-run { transition: width 400ms ease }
+}
+
+/* --------------------------------------------------------------- Chat history
+   The sidebar he knows from Claude, in the HUD's own voice: cyan on ink, his
+   words in a tinted bubble, JARVIS's plain, what JARVIS used as chips. */
+.ch {
+  --ch-ink: #030c12;
+  --ch-text: #d9f3f8;
+  --ch-dim: rgba(217, 243, 248, 0.56);
+  --ch-line: rgba(0, 229, 255, 0.15);
+  --ch-cy: #00e5ff;
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  height: 100%;
+  min-height: 100%;
+  background: var(--ch-ink);
+  color: var(--ch-text);
+  font: 400 14px/1.5 'Chakra Petch', system-ui, sans-serif;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+.ch button, .ch input { font: inherit; color: inherit }
+.ch :focus-visible { outline: 2px solid var(--ch-cy); outline-offset: 2px }
+.ch-side { display: flex; flex-direction: column; min-height: 0; padding: 18px 14px 12px; border-right: 1px solid var(--ch-line) }
+.ch-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px }
+.ch-top h2, .ch-head h2 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ch-cy) }
+.ch-btn { padding: 6px 11px; background: transparent; border: 1px solid var(--ch-line); border-radius: 3px; cursor: pointer; white-space: nowrap; font-size: 13px }
+.ch-btn:hover { border-color: var(--ch-cy); color: var(--ch-cy) }
+.ch-primary { background: rgba(0, 229, 255, 0.13); border-color: var(--ch-cy) }
+.ch-find { width: 100%; padding: 8px 11px; background: rgba(0, 229, 255, 0.05); border: 1px solid var(--ch-line); border-radius: 3px }
+.ch-find::placeholder { color: var(--ch-dim) }
+.ch-projects { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0 4px }
+.ch-proj { padding: 2px 8px; font-size: 11.5px; background: transparent; border: 1px solid var(--ch-line); border-radius: 10px; cursor: pointer; color: var(--ch-dim) }
+.ch-proj i { font-style: normal; font-family: 'JetBrains Mono', monospace; opacity: 0.7 }
+.ch-proj.on, .ch-proj:hover { border-color: var(--ch-cy); color: var(--ch-text) }
+.ch-err { color: #ff6b5e; font-size: 13px }
+.ch-quiet, .ch-empty { color: var(--ch-dim) }
+.ch-empty { display: grid; place-items: center; height: 100%; padding: 30px }
+.ch-list { flex: 1 1 auto; min-height: 0; overflow: auto; margin-top: 6px; padding-right: 4px }
+.ch-list h3 { margin: 14px 4px 4px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ch-dim) }
+.ch-item { display: block; width: 100%; padding: 8px 9px; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 3px; cursor: pointer }
+.ch-item:hover { background: rgba(0, 229, 255, 0.05) }
+.ch-item.open { background: rgba(0, 229, 255, 0.1); border-color: var(--ch-line) }
+.ch-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px }
+.ch-title em { margin-right: 6px; padding: 0 5px; font-style: normal; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ch-ink); background: var(--ch-cy); border-radius: 2px }
+.ch-meta { display: flex; gap: 8px; margin-top: 2px; font-size: 11.5px; color: var(--ch-dim); overflow: hidden; white-space: nowrap }
+.ch-meta b { font-weight: 500; color: var(--ch-cy); overflow: hidden; text-overflow: ellipsis }
+.ch-meta span:last-child { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-size: 11px }
+
+.ch-main { display: flex; flex-direction: column; min-height: 0; min-width: 0 }
+.ch-head { padding: 18px 26px 12px; border-bottom: 1px solid var(--ch-line) }
+.ch-head h2 { letter-spacing: 0.04em; text-transform: none; font-size: 18px; cursor: text }
+.ch-head p { margin: 4px 0 0; color: var(--ch-dim); font-size: 12.5px }
+.ch-head p b { margin-right: 8px; color: var(--ch-cy); font-weight: 500 }
+.ch-rename { width: 100%; padding: 4px 8px; font-size: 17px; background: rgba(0, 229, 255, 0.06); border: 1px solid var(--ch-cy); border-radius: 3px }
+.ch-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px }
+.ch-now { font-size: 12.5px; color: var(--ch-cy) }
+.ch-busy { color: var(--ch-cy) !important }
+.ch-log { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 18px 26px 26px; display: flex; flex-direction: column; gap: 14px }
+.ch-you { align-self: flex-end; max-width: min(640px, 82%); padding: 9px 13px; background: rgba(0, 229, 255, 0.1); border: 1px solid var(--ch-line); border-radius: 10px 10px 2px 10px }
+.ch-you p { margin: 0; white-space: pre-wrap }
+.ch-you time, .ch-auto time { display: block; margin-top: 3px; font: 400 10.5px 'JetBrains Mono', monospace; color: var(--ch-dim); text-align: right }
+.ch-jarvis { max-width: min(760px, 92%) }
+.ch-jarvis p { margin: 0 0 8px; white-space: pre-wrap }
+/* His answer to automatic work (an email that arrived), not to Salman: set back a little. */
+.ch-after-auto { padding-left: 12px; border-left: 2px solid var(--ch-line); opacity: 0.82; font-size: 13.5px }
+.ch-tools { list-style: none; display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 7px; padding: 0 }
+.ch-tools li { padding: 1px 8px; font-size: 11.5px; color: var(--ch-dim); border: 1px solid var(--ch-line); border-radius: 10px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.ch-tools li span { color: var(--ch-text); opacity: 0.8 }
+.ch-auto button { display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 4px 0; background: transparent; border: 0; border-top: 1px dashed var(--ch-line); cursor: pointer; color: var(--ch-dim); font-size: 12.5px; text-align: left }
+.ch-auto button time { margin-left: auto }
+.ch-auto pre { margin: 4px 0 0; padding: 8px 10px; max-height: 280px; overflow: auto; white-space: pre-wrap; font: 400 11.5px/1.45 'JetBrains Mono', monospace; color: var(--ch-dim); background: rgba(0, 229, 255, 0.03); border-radius: 3px }
+
+@media (max-width: 900px) {
+  .ch { grid-template-columns: 1fr }
+  .ch-side { max-height: 42vh; border-right: 0; border-bottom: 1px solid var(--ch-line) }
+}
+
+/* The panel lets clicks through so it never blocks the HUD; the restart button opts back in. */
+.diag-restart { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.3rem; pointer-events: auto }
+.diag-restart button {
+  padding: 0.3rem 0.7rem; font: inherit; color: inherit; cursor: pointer;
+  background: rgba(25, 216, 210, 0.12); border: 1px solid var(--accent, #19d8d2); border-radius: 2px;
+}
+.diag-restart button:hover { background: rgba(25, 216, 210, 0.24) }
+.diag-restart button:disabled { opacity: 0.5; cursor: default }
+.diag-restart span { opacity: 0.85 }

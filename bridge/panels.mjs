@@ -1,6 +1,7 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
 import { probeUrl } from './page.mjs'
+import { localPathFrom, isPdfUrl, vetDoc } from './docs.mjs'
 
 /**
  * The `display` tool — JARVIS's screen.
@@ -238,6 +239,22 @@ Choosing what to open:
   embed   — a YouTube or Vimeo watch URL. It is turned into a player.
   markup  — your own composed HTML, in the same .hud-* system the display tool
             uses, when none of the above is the shape of the answer.
+  document — a PDF: a drawing, an officer report, an inspection report, a fee
+            proposal. url is the file's path exactly as a tool gave it —
+            the work folder, the NAS, or
+            an https link to a PDF. It is drawn page by page with zoom; use
+            size "full" for drawings. Never open a PDF as an article.
+  galaxy  — the memory galaxy: every job a star, councils as arms, a job's
+            notes, drawings and emails in orbit. Needs no url. \`focus\` flies
+            to a source: a job number or address, optionally with
+            "file:<path>", "note:<words>" or "email:<subject words>".
+  specline — the Specline dashboard (specline.co.uk): switches, figures,
+            practices, people, messages, activity. Needs no url. Prefer the
+            specline_dashboard tool, which checks the connection first.
+  chats   — his past conversations with you, by project and date, to read
+            back or carry on. Needs no url.
+  tracker — the planning tracker: every application, its dates, what to
+            chase and what he must do. Needs no url. Prefer tracker_dashboard.
   camera  — the live view from the user's camera, on screen. Open it when they
             ask to see the camera, or when they want you to watch them do
             something: while it is open you can also review the seconds that
@@ -260,7 +277,7 @@ const bladeSchema = {
     .string()
     .describe('Two to four words naming what this is, e.g. "REUTERS" or "MARK VII".'),
   kind: z
-    .enum(['article', 'image', 'gallery', 'video', 'embed', 'markup', 'camera'])
+    .enum(['article', 'image', 'gallery', 'video', 'embed', 'markup', 'camera', 'document', 'galaxy', 'specline', 'tracker', 'chats'])
     .describe('What is being opened. See the tool description.'),
   url: z
     .string()
@@ -295,6 +312,11 @@ const bladeSchema = {
     .optional()
     .catch(undefined)
     .describe('turn = closes when the user next speaks. sticky = stays until replaced.'),
+  focus: z
+    .string()
+    .optional()
+    .catch(undefined)
+    .describe('For kind "galaxy": what to fly to — a job number/address, plus "file:<path>", "note:<words>" or "email:<words>".'),
 }
 
 const PROBE_DESCRIPTION = `Find out what is actually at a URL before showing it.
@@ -378,8 +400,24 @@ export function displayServer(emit, emitBlade) {
       }),
 
       tool('blade', BLADE_DESCRIPTION, bladeSchema, async (args) => {
-        const kind = args.kind
-        const url = String(args.url ?? '').trim()
+        let kind = args.kind
+        let url = String(args.url ?? '').trim()
+
+        // A PDF, or any file on this PC or the NAS, is a document — whatever
+        // kind was asked for. Opened as an "article" it went to the web-page
+        // reader, which cannot fetch a file:// address, and the blade was black.
+        const local = localPathFrom(url)
+        if (url && (kind === 'document' || isPdfUrl(url) || (local && kind === 'article'))) {
+          kind = 'document'
+          if (local) {
+            const v = await vetDoc(local)
+            if (!v.real) {
+              const why = { 404: 'that file does not exist', 400: 'only PDFs can be opened as documents', 403: 'that folder is not one JARVIS may show', 413: 'the file is too large to show' }[v.status] ?? v.message
+              return refuse(`Not opened: ${why} (${local}). Say so — do not describe it as open.`)
+            }
+            url = v.real
+          }
+        }
         const images = Array.isArray(args.images) ? args.images.filter(Boolean) : []
 
         // Refused rather than emitted, for the same reason the display tool
@@ -391,23 +429,26 @@ export function displayServer(emit, emitBlade) {
         if (kind === 'markup' && !String(args.html ?? '').trim()) {
           return refuse('Not opened: kind "markup" needs an `html` body.')
         }
-        if (['article', 'image', 'video', 'embed'].includes(kind) && !url) {
+        if (['article', 'image', 'video', 'embed', 'document'].includes(kind) && !url) {
           return refuse(`Not opened: kind "${kind}" needs a \`url\`.`)
         }
 
         const blade = {
-          id: `b${Date.now().toString(36)}-${(seq++).toString(36)}`,
-          title: String(args.title ?? '').trim() || 'DISPLAY',
+          // One galaxy at a time: a second request re-focuses the one that is open.
+          id: kind === 'galaxy' || kind === 'specline' || kind === 'tracker' || kind === 'chats' ? kind : `b${Date.now().toString(36)}-${(seq++).toString(36)}`,
+          title: String(args.title ?? '').trim() || (kind === 'galaxy' ? 'MEMORY GALAXY' : kind === 'specline' ? 'SPECLINE' : kind === 'tracker' ? 'PLANNING TRACKER' : kind === 'chats' ? 'CHATS' : 'DISPLAY'),
           kind,
           url: url || undefined,
           images: images.length ? images.slice(0, 8) : undefined,
           html: args.html || undefined,
           mode: args.mode ?? 'reader',
+          focus: kind === 'galaxy' ? String(args.focus ?? '').trim() || undefined : undefined,
           // A reading column for anything meant to be read, a broad frame for
           // anything meant to be looked at. Getting this wrong is the difference
           // between an article you can follow and one in a letterbox.
-          size: args.size ?? (kind === 'article' ? 'tall' : 'wide'),
-          hold: args.hold ?? 'turn',
+          size: args.size ?? (kind === 'article' ? 'tall' : kind === 'document' || kind === 'galaxy' || kind === 'specline' || kind === 'tracker' || kind === 'chats' ? 'full' : 'wide'),
+          // The galaxy stays up while he talks about what he is looking at.
+          hold: args.hold ?? (kind === 'galaxy' || kind === 'specline' || kind === 'tracker' || kind === 'chats' ? 'sticky' : 'turn'),
         }
         emitBlade(blade)
         return { content: [{ type: 'text', text: `Open on the blades as "${blade.title}".` }] }

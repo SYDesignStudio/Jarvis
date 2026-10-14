@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Scene } from './scene/Scene'
 import { Hud } from './ui/Hud'
+import { Console } from './ui/Console'
 import { Boot } from './ui/Boot'
 import { Ignition } from './ui/Ignition'
 import { Diagnostics } from './ui/Diagnostics'
@@ -12,9 +13,12 @@ import * as music from './lib/music'
 import * as hands from './lib/hands'
 import { listenForClap } from './lib/clap'
 import * as camera from './lib/camera'
+import * as screen from './lib/screen'
+import { postFocus, BUTTON_MINUTES } from './lib/focus'
+import { openDeskCard, closeDeskCard } from './ui/FocusCard'
 import * as kokoro from './lib/kokoro'
 import { TTS_ENGINE } from './config'
-import { forTool, attention } from './lib/fillers'
+import { forTool, attention, dismissed } from './lib/fillers'
 import {
   ask,
   warm,
@@ -23,8 +27,13 @@ import {
   watchPanels,
   watchBlades,
   watchCapture,
+  watchScreen,
+  watchSay,
+  watchBrain,
+  watchFocus,
   watchUi,
   watchConnection,
+  watchChat,
   connectedLabels,
   usingBridge,
   type Msg,
@@ -55,6 +64,14 @@ const AWAIT_SPEECH_MS = 14000
  *  again to continue a thought. */
 const FOLLOW_UP_MS = 11000
 
+/** What the screen watch asks the brain when the screen has sat still too long.
+ *  Marked as not coming from the user so the answer does not treat it as speech. */
+const STARE_PROMPT =
+  '(Screen watch — this is not the user speaking.) My screen has not changed for ' +
+  'four minutes. Call look_at_screen once, then give me one dry, genuinely useful ' +
+  'nudge about what I seem to be stuck on. One sentence. If nothing looks stuck, ' +
+  'say nothing at all.'
+
 /** crypto.randomUUID needs a secure context, which a LAN address over plain
  *  http is not. Not worth failing a whole turn over an id. */
 const newId = () =>
@@ -68,6 +85,23 @@ const NAME = '(?:jarvis|jarvys|jervis|travis|jarviss|java\'s|jarv)'
 const BARE_NAME = new RegExp(`^(?:hey|hi|ok|okay|yo)?\\s*${NAME}[\\s,.!?]*$`, 'i')
 /** A leading vocative on a real command: "Jarvis, what's the weather". */
 const LEADING_NAME = new RegExp(`^(?:hey|hi|ok|okay|yo)?\\s*${NAME}\\b[\\s,.:!?-]*`, 'i')
+/**
+ * Being dismissed. "Thank you, Jarvis", "that will be all", "stand down" — the
+ * whole utterance, with nothing else asked. He acknowledges and goes to
+ * standby instead of sending a pleasantry to the model as a question. A thank
+ * you that continues into a request ("thanks, now open the inbox") is not
+ * matched, because the request is the point.
+ */
+const STAND_DOWN = new RegExp(
+  `^(?:hey|hi|ok|okay|yo)?\\s*(?:${NAME}[\\s,]*)?` +
+    `(?:thank you|thanks|cheers|ta|` +
+    `that(?:'s|'ll be| is| will be| would be)? all|` +
+    `stand down|stand by|standby|go on standby|go to sleep|` +
+    `good ?night|goodbye|bye)` +
+    `(?:\\s*(?:very much|so much|a lot|for now|for today|for that))?` +
+    `[\\s,]*(?:${NAME})?[\\s,.!?]*$`,
+  'i',
+)
 
 export default function App() {
   const store = useStore
@@ -111,6 +145,29 @@ export default function App() {
     s.setPhase('dormant')
   }
 
+  /**
+   * "Thank you, Jarvis." Acknowledge, then power down.
+   *
+   * Spoken through a turn of its own so a barge-in during the acknowledgement
+   * is honoured: if the user starts talking again before he finishes, the turn
+   * counter has moved and he stays up rather than cutting himself off mid-word
+   * and vanishing.
+   */
+  const standDown = async () => {
+    const mine = ++turn.current
+    clearIdle()
+    silence()
+    const s = store.getState()
+    s.setCaption('')
+    s.setPhase('speaking')
+    const spk = createSpeaker()
+    speaker.current = spk
+    spk.say(dismissed())
+    await spk.end()
+    if (mine !== turn.current) return
+    goDormant()
+  }
+
   /** Open the mic and wait. `window` is how long before he gives up. */
   const listen = (window: number) => {
     clearIdle()
@@ -123,7 +180,7 @@ export default function App() {
 
   // -- one turn -------------------------------------------------------------
 
-  const respond = async (said: string): Promise<void> => {
+  const respond = async (said: string, opts: { hidden?: boolean; display?: string } = {}): Promise<void> => {
     const mine = ++turn.current
     const stale = () => mine !== turn.current
 
@@ -134,7 +191,11 @@ export default function App() {
     s.clearPanels()
     s.clearBlades()
     s.setCaption('')
-    s.pushTurn({ id: newId(), role: 'user', text: said })
+    // A turn JARVIS started himself (the screen watch) has no words of yours
+    // to put in the log.
+    // A typed message with files attached is shown as what was typed, not as
+    // the file instructions that ride along with it for the model.
+    if (!opts.hidden) s.pushTurn({ id: newId(), role: 'user', text: opts.display ?? said })
     s.setPhase('thinking')
 
     const spk = createSpeaker()
@@ -218,6 +279,66 @@ export default function App() {
     }
   }
 
+  /**
+   * A line the bridge wants said outside any conversation: a focus callout,
+   * "Locked on, sir", the end-of-session report.
+   *
+   * A drift callout is dropped if a conversation is under way — you are at
+   * home base talking to him, which is by definition not drifting. Anything
+   * else is said on its own speaker so it never cuts off an answer.
+   */
+  const sayLine = (text: string, open: boolean, drift: boolean) => {
+    const phase = store.getState().phase
+    if (phase === 'offline' || phase === 'boot') return
+    const busy = phase === 'thinking' || phase === 'tooling' || phase === 'speaking'
+    if (busy && drift) return
+    const spk = createSpeaker()
+    if (!busy) speaker.current = spk
+    spk.say(text)
+    void spk.end().then(() => {
+      // The answer window: after "what are we focusing on?" the mic opens for
+      // one reply without the wake word.
+      if (open && !['thinking', 'tooling', 'speaking'].includes(store.getState().phase)) {
+        listen(AWAIT_SPEECH_MS)
+      }
+    })
+  }
+
+  /** S: start or stop sharing the screen. Must come from a key or a click. */
+  const toggleShare = () => {
+    if (screen.shareLive()) {
+      screen.stopShare()
+      return
+    }
+    store.getState().setError(null)
+    void screen
+      .startShare(() => store.getState().setScreenShare(false))
+      .then(() => {
+        store.getState().setScreenShare(true)
+        if (screen.shareSurface() === 'browser') {
+          store
+            .getState()
+            .setError('You shared one tab. Press S twice and choose Entire screen so I can see your work.')
+        }
+      })
+      .catch((err: DOMException) => {
+        if (err?.name !== 'NotAllowedError') {
+          store.getState().setError(`Screen sharing failed: ${err?.message ?? err}`)
+        }
+      })
+  }
+
+  /** F: start a focus session, or bring the desk card back if one is running. */
+  const focusKey = () => {
+    const f = store.getState().focus
+    void openDeskCard().catch(() => {})
+    if (f.active) return
+    store.getState().setError(null)
+    void postFocus('start', { minutes: BUTTON_MINUTES }).catch((err: Error) =>
+      store.getState().setError(err.message),
+    )
+  }
+
   // -- voice events ---------------------------------------------------------
 
   /** What the voice loop should do with what it hears, derived from phase. */
@@ -292,6 +413,12 @@ export default function App() {
   const onUtterance = (text: string) => {
     const phase = store.getState().phase
     if (phase === 'offline' || phase === 'boot' || phase === 'dormant') return
+
+    // Dismissed. One line, then standby — no model round-trip for a thank you.
+    if (STAND_DOWN.test(text)) {
+      void standDown()
+      return
+    }
 
     // People keep using his name as a vocative once they're already talking to
     // him. Strip it rather than sending "jarvis" to the model as a question.
@@ -421,6 +548,25 @@ export default function App() {
       }
     })
 
+    // The screen: one frame, captured the moment he asks, or an honest no.
+    watchScreen(async () => {
+      store.getState().setLooking('your screen')
+      try {
+        return screen.grabScreen()
+      } catch (err) {
+        return { error: (err as Error).message }
+      } finally {
+        setTimeout(() => store.getState().setLooking(null), 600)
+      }
+    })
+    watchSay(({ text, listen: open, drift }) => sayLine(text, open, drift))
+    watchBrain((b) => store.getState().setBrain(b))
+    watchChat((id) => store.getState().setChatId(id))
+    watchFocus((f) => {
+      store.getState().setFocus(f)
+      if (!f.active) closeDeskCard()
+    })
+
     // The interface is JARVIS's to drive. These arrive out of band, pushed
     // mid-turn the way panels are, so a command can retint the reactor or put
     // something into orbit while he is still speaking the sentence about it.
@@ -459,6 +605,11 @@ export default function App() {
         store
           .getState()
           .setError('Bridge reconnected. The previous conversation was not kept.')
+        // The voice engine was chosen from /health at boot. If the page came
+        // up while the bridge was restarting, that said "no voice" and JARVIS
+        // has been speaking in Chrome's own voice since; ask again now the
+        // bridge is back, so the next line is Fish without a reload.
+        void probeCapabilities()
       }
     })
     const warming = warm().catch((err: Error) => s.setError(err.message))
@@ -576,15 +727,35 @@ export default function App() {
     }
     pump()
 
+    /**
+     * The screen watch. Costs nothing until the screen has sat unchanged past
+     * the stare threshold — the diffing is local — and then asks the brain for
+     * one nudge, only while he is on standby so it never interrupts a
+     * conversation, and then leaves you alone for the cooldown.
+     */
+    let lastNudge = 0
+    const stare = setInterval(() => {
+      if (!store.getState().screenShare) return
+      if (store.getState().phase !== 'dormant') return
+      if (screen.stillFor() < screen.STARE_MS) return
+      if (Date.now() - lastNudge < screen.NUDGE_COOLDOWN_MS) return
+      lastNudge = Date.now()
+      screen.resetStill()
+      void respond(STARE_PROMPT, { hidden: true })
+    }, 15_000)
+
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      // Letters compared case-free: with Caps Lock on the browser reports "S",
+      // not "s", and every shortcut here used to go silently dead.
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
 
       // V auditions the next British voice installed on this machine. Which
       // ones exist varies per Mac, so hearing them beats trusting a ranking.
       // Bare V only — ⌘V and ⌃V are paste, and swallowing those was rude.
       if (
-        e.key === 'v' &&
+        key === 'v' &&
         !e.repeat &&
         !e.metaKey &&
         !e.ctrlKey &&
@@ -601,10 +772,46 @@ export default function App() {
         return
       }
 
+      // K opens the memory galaxy — every job a star — and closes it again.
+      if (key === 'k' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        const s = store.getState()
+        if (s.blades.some((b) => b.kind === 'galaxy')) s.closeBlade('galaxy')
+        else s.pushBlade({ id: 'galaxy', title: 'MEMORY GALAXY', kind: 'galaxy', size: 'full', hold: 'sticky' })
+        return
+      }
+
+      // H opens the chat history — past conversations — and closes it again.
+      if (key === 'h' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        const s = store.getState()
+        if (s.blades.some((b) => b.kind === 'chats')) s.closeBlade('chats')
+        else s.pushBlade({ id: 'chats', title: 'CHATS', kind: 'chats', size: 'full', hold: 'sticky' })
+        return
+      }
+
+      // A opens the planning tracker — applications, dates, chases — and closes it again.
+      if (key === 'a' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        const s = store.getState()
+        if (s.blades.some((b) => b.kind === 'tracker')) s.closeBlade('tracker')
+        else s.pushBlade({ id: 'tracker', title: 'PLANNING TRACKER', kind: 'tracker', size: 'full', hold: 'sticky' })
+        return
+      }
+
+      // P opens the Specline dashboard — the product's own desk — and closes it again.
+      if (key === 'p' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        const s = store.getState()
+        if (s.blades.some((b) => b.kind === 'specline')) s.closeBlade('specline')
+        else s.pushBlade({ id: 'specline', title: 'SPECLINE', kind: 'specline', size: 'full', hold: 'sticky' })
+        return
+      }
+
       // G puts the camera on and starts tracking hands. Off by default and
       // never implicit: a webcam that turns itself on because an interface
       // thought it might be useful is not a trade anyone agreed to.
-      if (e.key === 'g' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (key === 'g' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault()
         const on = store.getState().gestures
         if (on) {
@@ -629,11 +836,24 @@ export default function App() {
         return
       }
 
+      const bare = !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey
+      const live = store.getState().phase !== 'offline' && store.getState().phase !== 'boot'
+      if (key === 's' && bare && live) {
+        e.preventDefault()
+        toggleShare()
+        return
+      }
+      if (key === 'f' && bare && live) {
+        e.preventDefault()
+        focusKey()
+        return
+      }
+
       // T speaks a fixed line, bypassing the wake word, the recogniser and the
       // model entirely. When "I can't hear him" is the report, this is the one
       // keypress that separates a broken voice engine from a broken voice loop
       // — and it prints the verdict rather than making you infer it.
-      if (e.key === 't' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (key === 't' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault()
         silence()
         const t = createSpeaker()
@@ -684,7 +904,10 @@ export default function App() {
 
     return () => {
       cancelAnimationFrame(raf)
+      clearInterval(stare)
       window.removeEventListener('keydown', onKey)
+      screen.stopShare()
+      closeDeskCard()
       clearIdle()
       if (voicePoll.current) clearInterval(voicePoll.current)
       voice.current?.stop()
@@ -699,6 +922,7 @@ export default function App() {
     <>
       <Scene />
       <Hud />
+      <Console onSubmit={(text, opts) => respond(text, opts)} />
       <Boot />
       <Diagnostics />
       <Ignition onStart={() => void powerOn()} />

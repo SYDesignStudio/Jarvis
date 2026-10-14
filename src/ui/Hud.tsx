@@ -6,6 +6,7 @@ import { BladeSweep, Blades } from './Blades'
 import { Effects } from './Effects'
 import { Pointer } from './Pointer'
 import { GestureGuide } from './GestureGuide'
+import { clock } from '../lib/focus'
 
 const statusText: Record<Phase, string> = {
   offline: 'OFFLINE',
@@ -159,6 +160,18 @@ export function Hud() {
   const gestures = useStore((s) => s.gestures)
   const looking = useStore((s) => s.looking)
   const ui = useStore((s) => s.ui)
+  const screenShare = useStore((s) => s.screenShare)
+  const brain = useStore((s) => s.brain)
+  const focus = useStore((s) => s.focus)
+  const focusLabel = !focus.active
+    ? ''
+    : focus.paused
+      ? 'paused'
+      : focus.deferred
+        ? 'go to your work'
+        : focus.adrift && !focus.excused
+          ? 'adrift'
+          : 'on target'
 
   // accentFor folds JARVIS's overrides in over the phase colour, so one
   // variable on the root carries a theme change into every .hud-* rule without
@@ -195,15 +208,32 @@ export function Hud() {
           </div>
         )}
 
-        <div className="status">
-          <span className="dot" />
-          <span className="status-text">
-            {/* bootNote is the voice-model download readout. It is only ever
-                the right thing to show during boot — as a general fallback a
-                note that never got cleared (a stuck 'voice 97%') sits over
-                LISTENING and PROCESSING for the rest of the session. */}
-            {phase === 'boot' && bootNote ? bootNote : statusText[phase]}
-          </span>
+        <div className="status-stack">
+          <div className="status">
+            <span className="dot" />
+            <span className="status-text">
+              {/* bootNote is the voice-model download readout. It is only ever
+                  the right thing to show during boot — as a general fallback a
+                  note that never got cleared (a stuck 'voice 97%') sits over
+                  LISTENING and PROCESSING for the rest of the session. */}
+              {phase === 'boot' && bootNote ? bootNote : statusText[phase]}
+            </span>
+          </div>
+          {/* The brain that actually answered last, read off the answer —
+              not the one configured. That gap is the bug this chip exists for. */}
+          {brain && phase !== 'offline' && (
+            <div className="chip">
+              <span className="chip-key">core</span>
+              <span className="chip-val">{brain.pretty}</span>
+            </div>
+          )}
+          {focus.active && (
+            <div className={`chip chip-focus${focus.adrift && !focus.excused ? ' is-adrift' : ''}`}>
+              <span className="chip-key">focus</span>
+              <span className="chip-val">{clock(focus.remainingMs ?? 0)}</span>
+              <span className="chip-note">{focusLabel}</span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -312,7 +342,8 @@ export function Hud() {
 
       <footer className="hud-bottom">
         <span className="hint">
-          say <b>“hey jarvis”</b> · <kbd>Space</kbd> to talk · <kbd>G</kbd> hands
+          say <b>“hey jarvis”</b> · <kbd>Space</kbd> to talk · <kbd>G</kbd> hands ·{' '}
+          <kbd>S</kbd> {screenShare ? 'stop sharing' : 'share screen'} · <kbd>F</kbd> focus
           {voice && (
             <>
               {' · '}
@@ -336,6 +367,18 @@ export function Hud() {
         </div>
       )}
       <GestureGuide live={gestures} />
+
+      {/* Not a feature to be subtle about. While the screen is shared, the
+          whole window says so, the way an operating system's recording
+          border does, and the pill says how to stop it. */}
+      {screenShare && (
+        <>
+          <div className="share-frame" aria-hidden="true" />
+          <div className={`share-live${gestures || looking ? ' is-lower' : ''}`} role="status">
+            screen shared · <kbd>S</kbd> to stop
+          </div>
+        </>
+      )}
     </div>
   )
 }

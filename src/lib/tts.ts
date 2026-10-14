@@ -45,6 +45,14 @@ type Speaker = {
 // What he is saying right now
 // ---------------------------------------------------------------------------
 
+/**
+ * ?mute=1 on the page URL: nothing in this tab ever speaks. For test tabs, so
+ * a preflight or a second window is never heard from the background. Checked
+ * in enqueue, the one door every spoken line goes through.
+ */
+const MUTED =
+  typeof location !== 'undefined' && new URLSearchParams(location.search).get('mute') === '1'
+
 let speaking = ''
 let recent = ''
 let recentUntil = 0
@@ -62,7 +70,7 @@ const ECHO_TAIL_MS = 1800
  * indistinguishable. This tells them apart at a glance.
  */
 export const diag = {
-  engine: 'system' as 'system' | 'kokoro' | 'elevenlabs',
+  engine: 'system' as 'system' | 'kokoro' | 'elevenlabs' | 'fish',
   /** Utterances handed to an engine — the OS voice or an audio element. */
   spoken: 0,
   /**
@@ -244,6 +252,7 @@ function pickVoice(): SpeechSynthesisVoice | null {
  *  always naming a speechSynthesis voice that a cloud or neural engine has
  *  quietly replaced. */
 export function currentVoiceName(): string {
+  if (caps().ttsEngine === 'fish') return 'Fish Audio'
   if (USE_ELEVENLABS || caps().tts) return 'ElevenLabs'
   if (TTS_ENGINE === 'kokoro' && !kokoro.isUnavailable()) {
     return KOKORO_VOICE.replace(/^bm_/, '')
@@ -286,6 +295,35 @@ if (typeof speechSynthesis !== 'undefined') {
  * caught and ignored.
  */
 let outCtx: AudioContext | null = null
+
+/**
+ * Lowering his voice without stopping it.
+ *
+ * When the microphone hears something while he is talking, it may be the user
+ * or it may be his own voice coming back through the speakers — on a laptop,
+ * whose speakers sit beside its microphone, it is very often the latter. So the
+ * first response is to drop to a fifth of the volume, not to stop: the user
+ * hears they have been noticed, and the echo that caused a false alarm shrinks
+ * with it. voice.ts then either confirms the interruption (and cancels) or
+ * restores him. Applied to every sentence playing and every one that starts
+ * while it lasts.
+ */
+const DUCKED = 0.2
+let duckLevel = 1
+const liveGains = new Set<GainNode>()
+const liveEls = new Set<HTMLAudioElement>()
+
+export function duckSpeech(on: boolean): void {
+  duckLevel = on ? DUCKED : 1
+  for (const g of liveGains) {
+    try {
+      g.gain.setTargetAtTime(duckLevel, g.context.currentTime, 0.04)
+    } catch {
+      g.gain.value = duckLevel
+    }
+  }
+  for (const el of liveEls) el.volume = duckLevel
+}
 
 function outputContext(): AudioContext | null {
   try {
@@ -353,7 +391,7 @@ export function createSpeaker(): Speaker {
   }
 
   const enqueue = (sentence: string, priority = false) => {
-    if (cancelled) return
+    if (cancelled || MUTED) return
     // Shape once here so both engines get the same text — stripped markdown,
     // and the comma before "sir" that buys the beat.
     const text = shape(sentence)
@@ -384,7 +422,7 @@ export function createSpeaker(): Speaker {
       // for a session that had spoken every one of its sentences through
       // ElevenLabs, which makes the one field naming the engine useless
       // exactly when you are trying to work out which engine is at fault.
-      diag.engine = 'elevenlabs'
+      diag.engine = caps().ttsEngine === 'fish' ? 'fish' : 'elevenlabs'
       return fetchCloudAudio(text).catch(() => null)
     }
     if (TTS_ENGINE === 'kokoro' && !kokoro.isUnavailable()) {
@@ -446,7 +484,7 @@ export function createSpeaker(): Speaker {
       if (!nativeBroken) {
         nativeBroken = true
         diag.nativeBroken = true
-        diag.engine = 'elevenlabs'
+        diag.engine = caps().ttsEngine === 'fish' ? 'fish' : 'elevenlabs'
         console.warn('[jarvis] system voice is not producing sound — using the bridge speech proxy from here on')
       }
       const rescue = await fetchCloudAudio(item.text).catch(() => null)
@@ -591,16 +629,26 @@ export function createSpeaker(): Speaker {
       // see the onplaying handler below.
       diag.spoken++
       diag.lastText = text.slice(0, 60)
-      diag.voice = diag.engine === 'kokoro' ? KOKORO_VOICE : 'ElevenLabs'
+      diag.voice =
+        diag.engine === 'kokoro'
+          ? KOKORO_VOICE
+          : caps().ttsEngine === 'fish'
+            ? 'Fish Audio'
+            : 'ElevenLabs'
 
       let read: (() => number) | null = null
+      let gain: GainNode | null = null
       const ctx = outputContext()
       if (ctx) {
         try {
           const analyser = ctx.createAnalyser()
           analyser.fftSize = 256
-          ctx.createMediaElementSource(audio).connect(analyser)
+          gain = ctx.createGain()
+          gain.gain.value = duckLevel
+          ctx.createMediaElementSource(audio).connect(gain)
+          gain.connect(analyser)
           analyser.connect(ctx.destination)
+          liveGains.add(gain)
           const bins = new Uint8Array(analyser.frequencyBinCount)
           read = () => {
             analyser.getByteFrequencyData(bins as Uint8Array<ArrayBuffer>)
@@ -610,7 +658,14 @@ export function createSpeaker(): Speaker {
           }
         } catch {
           /* the analyser is a nice-to-have */
+          if (gain) liveGains.delete(gain)
+          gain = null
         }
+      }
+      // Without the graph, the element's own volume is the only control there is.
+      if (!gain) {
+        audio.volume = duckLevel
+        liveEls.add(audio)
       }
 
       let raf = 0
@@ -626,6 +681,8 @@ export function createSpeaker(): Speaker {
         done = true
         cancelAnimationFrame(raf)
         outLevel = 0.12
+        if (gain) liveGains.delete(gain)
+        liveEls.delete(audio)
         URL.revokeObjectURL(url)
         if (currentAudio === audio) currentAudio = null
         resolve()

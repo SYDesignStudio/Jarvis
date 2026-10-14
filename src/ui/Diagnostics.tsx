@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../store'
+import { BRIDGE_HTTP_URL } from '../config'
 
 /**
  * The "why can't he hear me / why can't I hear him" panel.
@@ -64,7 +65,7 @@ export function Diagnostics() {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA') return
-      if (e.key === 'd' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (e.key.toLowerCase() === 'd' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault()
         setOpen((o) => !o)
       }
@@ -127,6 +128,36 @@ export function Diagnostics() {
       <Row k="failures" v={String(t.failures ?? 0)} bad={(t.failures ?? 0) > 0} />
       <Row k="cloud rescues" v={String(t.rescued ?? 0)} />
       <Row k="error" v={t.lastError || '—'} bad={Boolean(t.lastError)} />
+
+      <div className="diag-sec">BRAIN</div>
+      <RestartButton />
+    </div>
+  )
+}
+
+/**
+ * Restart the brain from wherever this page is open — the Mac included. The
+ * launcher on the PC starts it again; this page keeps running and reconnects
+ * into the same chat. The face itself (this page) reloads its own code.
+ */
+function RestartButton() {
+  const [state, setState] = useState('')
+  const restart = async () => {
+    setState('Restarting…')
+    try {
+      const r = await fetch(`${BRIDGE_HTTP_URL}/restart`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' })
+      const data = await r.json().catch(() => ({}))
+      setState(r.ok ? 'Restarting — back in about twenty seconds.' : `Not restarted: ${data.error ?? r.status}`)
+    } catch (e) {
+      setState(`Not restarted: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  return (
+    <div className="diag-restart">
+      <button type="button" onClick={() => void restart()} disabled={state === 'Restarting…'}>
+        Restart JARVIS
+      </button>
+      {state ? <span>{state}</span> : null}
     </div>
   )
 }

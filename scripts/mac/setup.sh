@@ -14,10 +14,12 @@ eval "$(/opt/homebrew/bin/brew shellenv)"
 brew list node >/dev/null 2>&1 || brew install node
 brew list python@3.12 >/dev/null 2>&1 || brew install python@3.12
 [ -d "/Applications/Google Chrome.app" ] || brew install --cask google-chrome
-command -v claude >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code
+# npm 12 skips install scripts unless allowed; Claude Code needs its postinstall to fetch its binary.
+command -v claude >/dev/null 2>&1 || npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code
 
 # Native modules are built per machine: never copy node_modules from the PC.
-npm install
+# A dropped connection mid-download is common on a fresh machine, so try up to three times.
+for attempt in 1 2 3; do npm install && break; echo "  npm install failed (attempt $attempt); retrying…"; sleep 5; done
 
 # Whisper on Apple silicon, in its own venv so Homebrew's Python stays untouched.
 if [ ! -x .venv-mac/bin/python ]; then

@@ -360,7 +360,12 @@ meh('screen share cannot be tested headless — press S in JARVIS and ask "what 
 // ------------------------------------------------------------------ beyond the desk
 section('Telegram, inbox, phone')
 const s = diag?.surfaces
-if (!s) {
+if (diag?.satellite) {
+  ok('satellite: the PC owns Telegram polling, the inbox watchers and the background sweeps; this JARVIS reads mail and messages you when asked')
+  if (s?.telegram?.configured && s.telegram.ok) ok(`Telegram bot @${s.telegram.username} can be messaged from here`)
+  const boxes = Array.isArray(s?.mail) ? s.mail : []
+  if (boxes.length) ok(`${boxes.length} inbox${boxes.length === 1 ? '' : 'es'} readable on request: ${boxes.map((m) => m.user).join(', ')}`)
+} else if (!s) {
   meh('the running bridge reports no surfaces — restart JARVIS')
 } else {
   if (!s.telegram.configured) meh('Telegram not configured (TELEGRAM_BOT_TOKEN)')

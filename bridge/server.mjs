@@ -15,6 +15,7 @@
  *   node bridge/server.mjs
  */
 
+import './env.mjs'
 import { execFile } from 'node:child_process'
 import { WebSocketServer } from 'ws'
 import { query } from '@anthropic-ai/claude-agent-sdk'
@@ -62,33 +63,7 @@ import { buildGalaxy, satellitesOf } from './memory/galaxy.mjs'
 import { searchMail as searchMailboxes } from './mailtools.mjs'
 import { accountsFromEnv as mailAccounts } from './surfaces/mail.mjs'
 
-/**
- * A local .env.local (and .env), read once at startup.
- *
- * This process is spawned directly (`node bridge/server.mjs`), never through a
- * shell that has sourced anything, so nothing outside process.env survives a
- * restart. .env.local is the file .env.example already tells you to create —
- * it just wasn't actually being read. Real environment variables always win,
- * and .env.local wins over .env, matching Vite's own precedence for the same
- * file names.
- */
-function loadDotenv(name) {
-  let raw
-  try {
-    raw = readFileSync(join(process.cwd(), name), 'utf8')
-  } catch {
-    return
-  }
-  for (const line of raw.split('\n')) {
-    const m = /^\s*([\w.-]+)\s*=\s*(.*?)\s*$/.exec(line)
-    if (!m || m[1].startsWith('#')) continue
-    const [, key, rawValue] = m
-    if (process.env[key] !== undefined) continue
-    process.env[key] = rawValue.replace(/^(['"])(.*)\1$/, '$2')
-  }
-}
-loadDotenv('.env')
-loadDotenv('.env.local')
+// .env.local is read by env.mjs, the first import above, before any module looks at process.env.
 
 const PORT = Number(process.env.JARVIS_BRIDGE_PORT ?? 8787)
 
@@ -1441,6 +1416,8 @@ const handleRequest = async (req, res) => {
       JSON.stringify({
         ok: true,
         bootedAt: BOOTED_AT,
+        satellite: SATELLITE,
+        machine: process.platform,
         configuredModel: MODEL,
         personality: getMode(),
         specline: { configured: speclineConfigured() },

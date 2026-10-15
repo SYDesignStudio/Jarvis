@@ -44,7 +44,7 @@ files, the other sees.
 
    The setup installs Node, Python, Chrome and Claude Code, builds the Mac's
    own `node_modules`, makes a Python with mlx-whisper for the M5, sets
-   `JARVIS_SATELLITE=1` in `.env.local`, and makes `~/Applications/JARVIS.app`.
+   `JARVIS_SATELLITE=1` in `.env.local`, and makes `/Applications/JARVIS.app`.
 
 4. Open **JARVIS** from Launchpad. The first time, macOS asks for the PC's and
    the NAS's password for the mounts: tick *Remember this password in my keychain*.

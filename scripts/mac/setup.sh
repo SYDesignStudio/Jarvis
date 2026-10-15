@@ -42,4 +42,4 @@ fi
 bash scripts/mac/make-app.sh
 echo
 echo "Done. Sign in to Claude once:  claude"
-echo "Then open JARVIS from Launchpad, or:  open ~/Applications/JARVIS.app"
+echo "Then open JARVIS from Launchpad, or:  open /Applications/JARVIS.app"

@@ -1,9 +1,12 @@
 #!/bin/bash
-# Builds ~/Applications/JARVIS.app: one icon that mounts the shares, starts the brain and
+# Builds /Applications/JARVIS.app: one icon that mounts the shares, starts the brain and
 # the face if they are not running, and opens JARVIS in its own Chrome window.
 set -e
 JARVIS_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-APP="$HOME/Applications/JARVIS.app"
+# The main Applications folder when it is writable (it is, for an admin user), else the personal one.
+if [ -w /Applications ]; then APP="/Applications/JARVIS.app"; else APP="$HOME/Applications/JARVIS.app"; fi
+# A copy left in the other place would go stale.
+[ "$APP" = "/Applications/JARVIS.app" ] && rm -rf "$HOME/Applications/JARVIS.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cat > "$APP/Contents/Info.plist" <<PLIST

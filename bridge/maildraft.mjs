@@ -4,7 +4,7 @@ import { basename, extname, isAbsolute } from 'node:path'
 import { ImapFlow } from 'imapflow'
 import { simpleParser } from 'mailparser'
 import { composeEmail, logoIsLive, LOGO_URL, signatureFor } from './signature.mjs'
-import { DOC_ROOTS, localPathFrom } from './docs.mjs'
+import { DOC_ROOTS, localPathFrom, within } from './docs.mjs'
 
 /**
  * Emails with attachments, as Gmail DRAFTS — never sent from here.
@@ -39,13 +39,6 @@ const ALLOWED = {
   '.mp4': 'video/mp4',
   '.mov': 'video/quicktime',
 }
-
-const within = (roots, real) =>
-  roots.some((root) => {
-    const r = root.toLowerCase().replace(/[\\/]+$/, '')
-    const p = real.toLowerCase()
-    return p.startsWith(`${r}\\`) || p.startsWith(`${r}/`)
-  })
 
 /** Check every file before anything is built. Returns { files } or { error }. */
 export async function vetAttachments(paths = [], roots = DOC_ROOTS, { maxTotal = MAX_TOTAL, limitName = 'Gmail allows about 25 MB; send fewer, or a share link' } = {}) {

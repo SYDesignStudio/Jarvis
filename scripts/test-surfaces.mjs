@@ -315,10 +315,13 @@ test('PDF paths from the model become real paths, and only PDFs in the document 
   const { mkdtempSync, writeFileSync, mkdirSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
   const { join } = await import('node:path')
-  assert.equal(localPathFrom('file://192.168.0.105/salman_nas/My Work/x y.pdf'), '\\\\192.168.0.105\\salman_nas\\My Work\\x y.pdf', 'the NAS file:// form that made the black blade')
-  assert.equal(localPathFrom('file:///D:/APP%20DEVLOPMENT/a.pdf'), 'D:\\APP DEVLOPMENT\\a.pdf')
-  assert.equal(localPathFrom('D:/APP DEVLOPMENT/a.pdf'), 'D:\\APP DEVLOPMENT\\a.pdf')
-  assert.equal(localPathFrom('//192.168.0.105/salman_nas/a.pdf'), '\\\\192.168.0.105\\salman_nas\\a.pdf')
+  const win = process.platform === 'win32'
+  // On the PC the NAS is a UNC path; on the Mac it is the mounted volume, and drive letters mean nothing.
+  assert.equal(localPathFrom('file://192.168.0.105/salman_nas/My Work/x y.pdf'), win ? '\\\\192.168.0.105\\salman_nas\\My Work\\x y.pdf' : '/Volumes/salman_nas/My Work/x y.pdf', 'the NAS file:// form that made the black blade')
+  assert.equal(localPathFrom('file:///D:/APP%20DEVLOPMENT/a.pdf'), win ? 'D:\\APP DEVLOPMENT\\a.pdf' : null)
+  assert.equal(localPathFrom('D:/APP DEVLOPMENT/a.pdf'), win ? 'D:\\APP DEVLOPMENT\\a.pdf' : null)
+  assert.equal(localPathFrom('//192.168.0.105/salman_nas/a.pdf'), win ? '\\\\192.168.0.105\\salman_nas\\a.pdf' : '/Volumes/salman_nas/a.pdf')
+  if (!win) assert.equal(localPathFrom('/Volumes/salman_nas/a.pdf'), '/Volumes/salman_nas/a.pdf', 'a Mac path is already local')
   assert.equal(localPathFrom('https://pa.brent.gov.uk/x.pdf'), null)
   assert.ok(isPdfUrl('https://council.gov.uk/files/report.pdf?x=1') && !isPdfUrl('https://council.gov.uk/page'))
   const root = mkdtempSync(join(tmpdir(), 'docs-'))

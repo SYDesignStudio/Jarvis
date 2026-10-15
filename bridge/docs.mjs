@@ -29,9 +29,15 @@ export const DOC_ROOTS = [WORK_ROOT, LIBRARY_ROOT, NAS_SHARE, homedir(), tmpdir(
 
 export const MAX_DOC_BYTES = 250 * 1024 * 1024
 
-const within = (roots, real) =>
+/** True when `real` sits under one of the roots. Roots are resolved through symlinks
+ * the same way the file was (macOS keeps /var as a link to /private/var). */
+export const within = (roots, real) =>
   roots.some((root) => {
-    const rel = relative(root, real)
+    let r = root
+    try {
+      r = realpathSync(root)
+    } catch {}
+    const rel = relative(r, real)
     return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
   })
 

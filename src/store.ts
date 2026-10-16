@@ -40,7 +40,9 @@ export type Panel = {
 export type Blade = {
   id: string
   title: string
-  kind: 'article' | 'image' | 'gallery' | 'video' | 'embed' | 'markup' | 'camera' | 'document' | 'galaxy' | 'specline' | 'tracker' | 'chats'
+  kind: 'article' | 'image' | 'gallery' | 'video' | 'embed' | 'markup' | 'camera' | 'document' | 'galaxy' | 'specline' | 'tracker' | 'chats' | 'app' | 'apps'
+  /** app: which JARVIS-built app. */
+  slug?: string
   /** article / image / video / embed; for document, a vetted local/NAS path or a PDF URL. */
   url?: string
   /** galaxy: what to fly to — a job, optionally with file:/note:/email: fragment. */
@@ -243,6 +245,9 @@ type State = {
   expandedBlade: string | null
   /** JARVIS's control over his own appearance. UI_DEFAULTS == the stock look. */
   ui: UiState
+  /** When JARVIS last changed each of his apps, by slug — open app blades reload on it. */
+  appUpdates: Record<string, number>
+  noteAppUpdate: (slug: string) => void
   /** Whether the user's screen is being shared. The frame and pill follow this. */
   screenShare: boolean
   /** The model that actually answered last, as reported by the bridge. */
@@ -304,6 +309,8 @@ export const useStore = create<State>((set) => ({
   expandedBlade: null,
   bootNote: '',
   ui: defaultUi(),
+  appUpdates: {},
+  noteAppUpdate: (slug) => set((s) => ({ appUpdates: { ...s.appUpdates, [slug]: Date.now() } })),
   screenShare: false,
   brain: null,
   focus: { active: false },

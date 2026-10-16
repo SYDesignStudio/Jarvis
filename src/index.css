@@ -2618,3 +2618,127 @@ kbd {
 .diag-restart button:hover { background: rgba(25, 216, 210, 0.24) }
 .diag-restart button:disabled { opacity: 0.5; cursor: default }
 .diag-restart span { opacity: 0.85 }
+
+/* ---------------------------------------------------------------- apps JARVIS built */
+.ap-frame {
+  background: var(--bg);
+}
+.ap-root {
+  --ap-ink: #030c12;
+  --ap-text: #d9f3f8;
+  --ap-dim: rgba(217, 243, 248, 0.56);
+  --ap-line: rgba(0, 229, 255, 0.15);
+  --ap-cy: #00e5ff;
+  height: 100%;
+  overflow: auto;
+  padding: 26px 30px 40px;
+  color: var(--ap-text);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+}
+.ap-head {
+  margin-bottom: 22px;
+}
+.ap-title {
+  margin: 0 0 6px;
+  font: 600 15px/1.2 'Chakra Petch', system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ap-cy);
+}
+.ap-sub,
+.ap-none,
+.ap-error {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ap-dim);
+  max-width: 62ch;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ap-error {
+  color: #ff6b5e;
+}
+.ap-none {
+  padding: 40px 0;
+}
+.ap-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+.ap-item {
+  position: relative;
+  border: 1px solid var(--ap-line);
+  border-radius: 10px;
+  background: rgba(0, 229, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+}
+.ap-item:hover {
+  border-color: rgba(0, 229, 255, 0.4);
+}
+.ap-open {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 16px 12px;
+  flex: 1;
+}
+.ap-open:focus-visible {
+  outline: 2px solid var(--ap-cy);
+  outline-offset: -2px;
+  border-radius: 10px;
+}
+.ap-name {
+  font: 600 14px/1.2 'Chakra Petch', system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ap-cy);
+}
+.ap-desc {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ap-text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.ap-meta {
+  font: 11px/1 'IBM Plex Mono', monospace;
+  color: var(--ap-dim);
+  margin-top: 4px;
+}
+.ap-mini {
+  all: unset;
+  cursor: pointer;
+  font: 500 10px/1 'Chakra Petch', system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ap-dim);
+  padding: 8px 16px 12px;
+  align-self: flex-end;
+}
+.ap-mini:hover,
+.ap-mini:focus-visible {
+  color: var(--ap-cy);
+}
+.ap-mini.danger:hover {
+  color: #ff6b5e;
+}
+.ap-confirm {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px 6px 16px;
+  font: 500 11px/1 'Chakra Petch', system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffb547;
+}
+.ap-confirm .ap-mini {
+  padding: 8px 8px;
+}

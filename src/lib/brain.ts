@@ -69,6 +69,11 @@ export function watchUi(fn: (op: string, args: any) => void): void {
   if (usingBridge) bridge.watchUi(fn)
 }
 
+/** One of JARVIS's own apps changed on the bridge. */
+export function watchApp(fn: (slug: string) => void): void {
+  if (usingBridge) bridge.watchApp(fn)
+}
+
 /**
  * The one thing the bridge asks US for.
  *

@@ -277,7 +277,7 @@ const bladeSchema = {
     .string()
     .describe('Two to four words naming what this is, e.g. "REUTERS" or "MARK VII".'),
   kind: z
-    .enum(['article', 'image', 'gallery', 'video', 'embed', 'markup', 'camera', 'document', 'galaxy', 'specline', 'tracker', 'chats'])
+    .enum(['article', 'image', 'gallery', 'video', 'embed', 'markup', 'camera', 'document', 'galaxy', 'specline', 'tracker', 'chats', 'apps'])
     .describe('What is being opened. See the tool description.'),
   url: z
     .string()
@@ -435,8 +435,8 @@ export function displayServer(emit, emitBlade) {
 
         const blade = {
           // One galaxy at a time: a second request re-focuses the one that is open.
-          id: kind === 'galaxy' || kind === 'specline' || kind === 'tracker' || kind === 'chats' ? kind : `b${Date.now().toString(36)}-${(seq++).toString(36)}`,
-          title: String(args.title ?? '').trim() || (kind === 'galaxy' ? 'MEMORY GALAXY' : kind === 'specline' ? 'SPECLINE' : kind === 'tracker' ? 'PLANNING TRACKER' : kind === 'chats' ? 'CHATS' : 'DISPLAY'),
+          id: kind === 'galaxy' || kind === 'specline' || kind === 'tracker' || kind === 'chats' || kind === 'apps' ? kind : `b${Date.now().toString(36)}-${(seq++).toString(36)}`,
+          title: String(args.title ?? '').trim() || (kind === 'galaxy' ? 'MEMORY GALAXY' : kind === 'specline' ? 'SPECLINE' : kind === 'tracker' ? 'PLANNING TRACKER' : kind === 'chats' ? 'CHATS' : kind === 'apps' ? 'APPS' : 'DISPLAY'),
           kind,
           url: url || undefined,
           images: images.length ? images.slice(0, 8) : undefined,
@@ -446,9 +446,9 @@ export function displayServer(emit, emitBlade) {
           // A reading column for anything meant to be read, a broad frame for
           // anything meant to be looked at. Getting this wrong is the difference
           // between an article you can follow and one in a letterbox.
-          size: args.size ?? (kind === 'article' ? 'tall' : kind === 'document' || kind === 'galaxy' || kind === 'specline' || kind === 'tracker' || kind === 'chats' ? 'full' : 'wide'),
+          size: args.size ?? (kind === 'article' ? 'tall' : kind === 'document' || kind === 'galaxy' || kind === 'specline' || kind === 'tracker' || kind === 'chats' || kind === 'apps' ? 'full' : 'wide'),
           // The galaxy stays up while he talks about what he is looking at.
-          hold: args.hold ?? (kind === 'galaxy' || kind === 'specline' || kind === 'tracker' || kind === 'chats' ? 'sticky' : 'turn'),
+          hold: args.hold ?? (kind === 'galaxy' || kind === 'specline' || kind === 'tracker' || kind === 'chats' || kind === 'apps' ? 'sticky' : 'turn'),
         }
         emitBlade(blade)
         return { content: [{ type: 'text', text: `Open on the blades as "${blade.title}".` }] }

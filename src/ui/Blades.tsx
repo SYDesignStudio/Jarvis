@@ -10,6 +10,8 @@ import { Galaxy } from './Galaxy'
 import { SpeclineDash } from './SpeclineDash'
 import { TrackerDash } from './TrackerDash'
 import { ChatsDash } from './ChatsDash'
+import { AppView } from './AppView'
+import { AppsDash } from './AppsDash'
 
 /**
  * The blades.
@@ -180,6 +182,10 @@ const Body = memo(function Body({ blade }: { blade: Blade }) {
   if (blade.kind === 'tracker') return <TrackerDash />
 
   if (blade.kind === 'chats') return <ChatsDash />
+
+  if (blade.kind === 'apps') return <AppsDash />
+
+  if (blade.kind === 'app' && blade.slug) return <AppView slug={blade.slug} />
 
   if (blade.kind === 'article' && blade.url) {
     return (

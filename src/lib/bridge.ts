@@ -28,6 +28,8 @@ type Frame = {
   blade?: Blade
   op?: string
   args?: unknown
+  /** app frames: which JARVIS-built app changed. */
+  slug?: string
   id?: string
   ask?: string
   reason?: string
@@ -151,6 +153,12 @@ export function watchBlades(fn: (blade: Blade) => void) {
 let onUi: ((op: string, args: any) => void) | null = null
 export function watchUi(fn: (op: string, args: any) => void) {
   onUi = fn
+}
+
+/** JARVIS changed one of his apps (or removed it); the face reloads what is open. */
+let onApp: ((slug: string) => void) | null = null
+export function watchApp(fn: (slug: string) => void) {
+  onApp = fn
 }
 
 /**
@@ -315,6 +323,8 @@ function dispatch(ws: WebSocket) {
       onBrain?.({ model: msg.model, pretty: msg.pretty ?? msg.model })
     } else if (msg.type === 'focus' && msg.state) {
       onFocus?.(msg.state)
+    } else if (msg.type === 'app' && typeof msg.slug === 'string') {
+      onApp?.(msg.slug)
     } else if (msg.type === 'ui' && msg.op) {
       // A `ui` frame with no args is normal — reset and clear take none — so an
       // absent args object is an empty one, not a reason to drop the command.

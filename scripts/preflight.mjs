@@ -125,6 +125,7 @@ if (diag) {
   } else if (diag.knowledge === null) {
     meh('knowledge: the store could not be read (the KNOWLEDGE folder)')
   }
+  if (diag.apps) ok(`apps JARVIS has built: ${diag.apps.count} (press B for the shelf; ask for a dashboard to add one)`)
   if (diag.specline) {
     if (!diag.specline.configured) meh('Specline: not connected — generate a key in Specline → Admin → Settings → Your desk assistant, add it to .env.local as SPECLINE_AGENT_KEY')
     else {

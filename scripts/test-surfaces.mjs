@@ -804,6 +804,94 @@ test('a Retell webhook verifies with the right key and fails otherwise', () => {
   assert.equal(verifyWebhook(body, 'garbage', key), false)
 })
 
+// ---------------------------------------------------------------- apps JARVIS builds
+test('apps: written with a safe slug and files, served with the SDK under a no-connect CSP, patched with history, undone, removed', async () => {
+  const { createApps, injectSdk, cspFor, slugify, validFile } = await import('../bridge/apps/index.mjs')
+  const { mkdtempSync, existsSync, readdirSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  let tick = 0
+  const apps = createApps({ root: mkdtempSync(join(tmpdir(), 'apps-')), now: () => new Date(Date.UTC(2026, 9, 16, 9, 0, tick++)) })
+  assert.equal(slugify('Fees Dashboard!'), 'fees-dashboard')
+  assert.ok(validFile('data.json') && validFile('app.js') && !validFile('../x.html') && !validFile('x.exe') && !validFile('manifest.json'), 'file names are vetted')
+  assert.throws(() => apps.write({ name: 'No page', files: {} }), /needs an index.html/)
+  assert.throws(() => apps.write({ name: 'Bad', files: { 'index.html': '<h1>x</h1>', 'evil.exe': 'MZ' } }), /not an allowed file name/)
+  const m = apps.write({ name: 'Fees dashboard', description: 'Fees by month', files: { 'index.html': '<html><head><title>Fees</title></head><body><h1>Fees</h1><script>JARVIS.data("tracker")</script></body></html>', 'data.json': '{"months":[1,2]}' } })
+  assert.equal(m.slug, 'fees-dashboard')
+  assert.equal(m.version, 1)
+  assert.equal(apps.list().length, 1)
+  assert.equal(apps.get('fees-dashboard').files['data.json'], '{"months":[1,2]}')
+  assert.equal(apps.file('fees-dashboard', 'data.json').type, 'application/json; charset=utf-8')
+  assert.equal(apps.file('fees-dashboard', 'app.json'), null, 'the manifest is not a servable file')
+  assert.equal(apps.file('fees-dashboard', 'state.json'), null)
+  // the served document carries the SDK and the base stylesheet, once, in the head
+  const doc = injectSdk(apps.file('fees-dashboard', 'index.html').body.toString())
+  assert.ok(doc.includes('window.JARVIS = {') && doc.includes('href="../base.css"'), 'SDK and base.css injected')
+  assert.ok(doc.indexOf('window.JARVIS') < doc.indexOf('<title>'), 'in the head, before the app')
+  assert.ok(injectSdk('<p>bare</p>').startsWith('<!doctype html>'), 'a fragment is wrapped')
+  const csp = cspFor(['http://127.0.0.1:8787'])
+  assert.match(csp, /connect-src 'none'/)
+  assert.match(csp, /script-src 'self' http:\/\/127\.0\.0\.1:8787 'unsafe-inline'/)
+  assert.match(csp, /frame-ancestors 'self' http:\/\/localhost:\*/)
+  // patch: exact text, once, with the old version kept
+  assert.throws(() => apps.patch({ slug: 'fees-dashboard', find: 'nowhere', replace: 'x' }), /not in index.html/)
+  const p1 = apps.patch({ slug: 'fees-dashboard', find: '<h1>Fees</h1>', replace: '<h1>Fees by month</h1>' })
+  assert.equal(p1.version, 2)
+  assert.ok(apps.get('fees-dashboard').files['index.html'].includes('Fees by month'))
+  assert.equal(readdirSync(join(apps.root, 'fees-dashboard', 'history')).length, 1, 'one earlier version kept')
+  assert.throws(() => apps.patch({ slug: 'fees-dashboard', find: '<', replace: '[' }), /appears \d+ times/)
+  // state round-trips; undo restores the file and drops the history entry
+  apps.setState('fees-dashboard', { month: 'October' })
+  assert.deepEqual(apps.state('fees-dashboard'), { month: 'October' })
+  apps.undo('fees-dashboard')
+  assert.ok(apps.get('fees-dashboard').files['index.html'].includes('<h1>Fees</h1>'), 'undone')
+  assert.throws(() => apps.undo('fees-dashboard'), /no earlier version/)
+  assert.deepEqual(apps.state('fees-dashboard'), { month: 'October' }, 'state survives an undo')
+  // a rewrite keeps the manifest's birth and bumps the version
+  const m2 = apps.write({ slug: 'fees-dashboard', name: 'Fees dashboard', files: { 'index.html': '<html><body>v2</body></html>' } })
+  assert.equal(m2.version, 4, 'the version keeps counting through an undo')
+  assert.equal(m2.created, m.created)
+  assert.equal(apps.get('fees-dashboard').files['data.json'], '{"months":[1,2]}', 'files not passed are left alone')
+  // removal is a move to _trash
+  apps.remove('fees-dashboard')
+  assert.equal(apps.list().length, 0)
+  assert.ok(existsSync(join(apps.root, '_trash')) && readdirSync(join(apps.root, '_trash'))[0].startsWith('fees-dashboard-'))
+  assert.throws(() => apps.write({ slug: 'history', name: 'x', files: { 'index.html': '<p>x</p>' } }), /usable app name/)
+})
+
+test('apps: the routes list, serve the document with CSP, hand out data, refuse state writes that are not from the page', async () => {
+  const { createApps, appsRoutes } = await import('../bridge/apps/index.mjs')
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const apps = createApps({ root: mkdtempSync(join(tmpdir(), 'apps-')) })
+  apps.write({ name: 'Chase list', files: { 'index.html': '<html><body><h1>Chase</h1></body></html>', 'app.js': 'console.log(1)' } })
+  const hit = async (url, { method = 'GET', origin, body = '' } = {}) => {
+    let status = 0, headers = {}, out = ''
+    const res = { writeHead: (c, h) => ((status = c), (headers = h)), end: (b) => (out = b ?? '') }
+    const req = { url, method, headers: origin ? { origin } : {} }
+    const handled = await appsRoutes(req, res, { apps, cors: {}, readRaw: async () => Buffer.from(body), data: async (s) => (s === 'tracker' ? { applications: [1, 2] } : undefined), selfOrigins: () => ['http://127.0.0.1:8787'] })
+    return { handled, status, headers, out: Buffer.isBuffer(out) ? out.toString() : out }
+  }
+  assert.equal((await hit('/other')).handled, false)
+  assert.deepEqual(JSON.parse((await hit('/apps')).out).apps.map((a) => a.slug), ['chase-list'])
+  const doc = await hit('/apps/chase-list/')
+  assert.equal(doc.status, 200)
+  assert.match(doc.headers['content-security-policy'], /connect-src 'none'/)
+  assert.ok(doc.out.includes('window.JARVIS') && doc.out.includes('<h1>Chase</h1>'))
+  assert.equal((await hit('/apps/chase-list')).status, 302, 'no trailing slash → redirect so relative files resolve')
+  assert.equal((await hit('/apps/chase-list/app.js')).headers['content-type'], 'text/javascript; charset=utf-8')
+  assert.equal((await hit('/apps/chase-list/app.json')).status, 404, 'the manifest file is not served raw')
+  assert.equal((await hit('/apps/chase-list/../x')).status, 404)
+  assert.equal((await hit('/apps/base.css')).headers['content-type'], 'text/css; charset=utf-8')
+  assert.deepEqual(JSON.parse((await hit('/apps/data/tracker')).out), { applications: [1, 2] })
+  assert.equal((await hit('/apps/data/secrets')).status, 404)
+  assert.equal((await hit('/apps/chase-list/state', { method: 'POST', body: '{"a":1}' })).status, 403, 'no origin → refused')
+  assert.equal((await hit('/apps/chase-list/state', { method: 'POST', origin: 'http://localhost:5173', body: '{"a":1}' })).status, 200)
+  assert.deepEqual(JSON.parse((await hit('/apps/chase-list/state')).out), { state: { a: 1 } })
+  assert.equal((await hit('/apps/nope/')).status, 404)
+})
+
 let failed = 0
 for (const { name, fn } of tests) {
   try {

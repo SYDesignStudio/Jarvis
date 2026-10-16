@@ -1,0 +1,60 @@
+/* The look every JARVIS-built app starts from: the HUD's own dark cyan. */
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@300;400;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap');
+
+:root {
+  --interface: #00e5ff;
+  --bg: #01060c;
+  --ink: #d9f3f8;
+  --dim: rgba(217, 243, 248, 0.58);
+  --line: rgba(0, 229, 255, 0.16);
+  --panel: rgba(0, 229, 255, 0.045);
+  --hold: #ffb547;
+  --fail: #ff6b5e;
+  --pass: #5fe3a1;
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --display: 'Chakra Petch', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--ink); }
+body { font: 15px/1.5 var(--sans); padding: 20px 22px 32px; }
+h1, h2, h3, .ap-h { font-family: var(--display); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--interface); margin: 0 0 12px; }
+h1, .ap-h { font-size: 15px; }
+h2 { font-size: 13px; opacity: 0.9; }
+h3 { font-size: 12px; opacity: 0.8; }
+p { margin: 0 0 10px; }
+a { color: var(--interface); }
+small, .ap-dim { color: var(--dim); }
+code, .ap-mono { font-family: var(--mono); font-size: 0.92em; }
+
+.ap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.ap-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.ap-card > h2:first-child, .ap-card > h3:first-child { margin-top: 0; }
+.ap-stat { display: flex; flex-direction: column; gap: 2px; }
+.ap-stat b { font: 500 30px/1.1 var(--display); color: var(--interface); letter-spacing: 0.02em; }
+.ap-stat span { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+.ap-stat.hold b { color: var(--hold); }
+.ap-stat.fail b { color: var(--fail); }
+.ap-stat.pass b { color: var(--pass); }
+
+.ap-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ap-table th { text-align: left; font: 500 11px/1.3 var(--display); letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.ap-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.ap-table tr:hover td { background: rgba(0, 229, 255, 0.05); }
+
+.ap-note { border-left: 2px solid var(--interface); padding: 6px 12px; color: var(--dim); font-size: 13px; margin: 10px 0; }
+.ap-tag { display: inline-block; font: 500 11px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--dim); }
+.ap-tag.hold { color: var(--hold); border-color: rgba(255, 181, 71, 0.4); }
+.ap-tag.fail { color: var(--fail); border-color: rgba(255, 107, 94, 0.4); }
+.ap-tag.pass { color: var(--pass); border-color: rgba(95, 227, 161, 0.4); }
+
+.ap-btn, button { font: 500 12px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; color: var(--interface); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 9px 14px; cursor: pointer; }
+.ap-btn:hover, button:hover { background: rgba(0, 229, 255, 0.1); }
+.ap-btn.primary, button.primary { background: var(--interface); color: var(--bg); border-color: var(--interface); }
+input, select, textarea { font: 14px var(--sans); color: var(--ink); background: rgba(0, 0, 0, 0.35); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--interface); outline-offset: 1px; }
+
+.ap-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ap-empty { color: var(--dim); text-align: center; padding: 40px 0; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

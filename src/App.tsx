@@ -32,12 +32,15 @@ import {
   watchBrain,
   watchFocus,
   watchUi,
+  watchApp,
   watchConnection,
   watchChat,
   connectedLabels,
   usingBridge,
   type Msg,
 } from './lib/brain'
+import { setAskHandler } from './lib/appbus'
+import { UI_DEFAULTS } from './store'
 import { startAnalyser, micLevel } from './lib/audio'
 import { probeCapabilities } from './lib/capabilities'
 import { env } from './config'
@@ -179,6 +182,12 @@ export default function App() {
   }
 
   // -- one turn -------------------------------------------------------------
+
+  // An app JARVIS built may hand him a request, as if typed.
+  useEffect(() => {
+    setAskHandler((text) => void respond(text, { display: text }))
+    return () => setAskHandler(null)
+  })
 
   const respond = async (said: string, opts: { hidden?: boolean; display?: string } = {}): Promise<void> => {
     const mine = ++turn.current
@@ -491,6 +500,36 @@ export default function App() {
     watchServers((servers) => store.getState().setConnected(servers))
     watchPanels((panel) => store.getState().pushPanel(panel))
     watchBlades((blade) => store.getState().pushBlade(blade))
+    watchApp((slug) => store.getState().noteAppUpdate(slug))
+
+    /**
+     * A look he asked for stays. The ui_* tools redress the interface
+     * mid-conversation; what they set is kept on this screen so "make it
+     * amber from now on" survives a restart. ui_reset puts the stock look
+     * back and forgets it.
+     */
+    try {
+      const kept = localStorage.getItem('jarvis.ui')
+      if (kept) store.getState().applyUi(JSON.parse(kept))
+    } catch {
+      /* nothing kept, or storage unavailable */
+    }
+    store.subscribe((st, prev) => {
+      if (st.ui === prev.ui) return
+      try {
+        const { accent, background, palette, reactor, chrome } = st.ui
+        const stock =
+          accent === null &&
+          background === null &&
+          !Object.keys(palette).length &&
+          JSON.stringify(reactor) === JSON.stringify(UI_DEFAULTS.reactor) &&
+          JSON.stringify(chrome) === JSON.stringify(UI_DEFAULTS.chrome)
+        if (stock) localStorage.removeItem('jarvis.ui')
+        else localStorage.setItem('jarvis.ui', JSON.stringify({ accent, background, palette, reactor, chrome }))
+      } catch {
+        /* storage unavailable */
+      }
+    })
 
     /**
      * JARVIS asking to see something.
@@ -805,6 +844,15 @@ export default function App() {
         const s = store.getState()
         if (s.blades.some((b) => b.kind === 'specline')) s.closeBlade('specline')
         else s.pushBlade({ id: 'specline', title: 'SPECLINE', kind: 'specline', size: 'full', hold: 'sticky' })
+        return
+      }
+
+      // B opens the shelf of apps JARVIS has built, and closes it again.
+      if (key === 'b' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        const s = store.getState()
+        if (s.blades.some((b) => b.kind === 'apps')) s.closeBlade('apps')
+        else s.pushBlade({ id: 'apps', title: 'APPS', kind: 'apps', size: 'full', hold: 'sticky' })
         return
       }
 

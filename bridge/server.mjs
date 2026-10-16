@@ -62,6 +62,7 @@ import { serveDoc, MAX_DOC_BYTES } from './docs.mjs'
 import { buildGalaxy, satellitesOf } from './memory/galaxy.mjs'
 import { searchMail as searchMailboxes } from './mailtools.mjs'
 import { accountsFromEnv as mailAccounts } from './surfaces/mail.mjs'
+import { createApps, appsServer, appsRoutes } from './apps/index.mjs'
 
 // .env.local is read by env.mjs, the first import above, before any module looks at process.env.
 
@@ -389,7 +390,8 @@ function decideTool(name) {
       server === 'jarvis_personality' ||
       server === 'jarvis_knowledge' ||
       server === 'jarvis_specline' ||
-      server === 'jarvis_tracker'
+      server === 'jarvis_tracker' ||
+      server === 'jarvis_apps'
     ) {
       return true
     }
@@ -680,6 +682,28 @@ customers are other practices, its mailbox is info@specline.co.uk.
   a length or a number of credits. Say back what the site answered.
 - It cannot delete, change prices or touch payment keys — say that those are
   done on the site itself. On Telegram you can read Specline but not change it.
+
+Apps you build (jarvis_apps) — when Salman asks for a dashboard, a tracker of
+his own, a calculator, a checklist, a tool, "something on screen I can use":
+build it as an app, not a one-off display panel. An app is a complete web page
+(index.html with its own <style> and <script>) written with \`app_write\`; it
+lives inside JARVIS, opens in a blade, keeps its saved state, and is the same
+on the PC and the MacBook. In the page, window.JARVIS is already provided:
+JARVIS.data('tracker'|'specline'|'jobs'|'knowledge'|'chats'|'apps') for live
+data, JARVIS.file('data.json') for a file you wrote beside it, JARVIS.state
+.get()/.set() to remember things, JARVIS.ask('…') to hand you a request from
+a button, JARVIS.onRefresh(fn). The base stylesheet gives it your own dark
+cyan look (--interface, --ink, --dim, --line, --hold, --fail, --pass;
+.ap-grid .ap-card .ap-stat .ap-table .ap-note .ap-btn) — use it, so his apps
+look like part of you. Charts: Chart.js from cdn.jsdelivr.net. Build the
+whole thing in one app_write, then say what it does in a sentence; for a
+change ("add a column", "make the overdue ones red") \`app_read\` then
+\`app_patch\` the exact text, never a rewrite for a small change. "Undo
+that" → \`app_undo\`. "Show me my apps", B key → \`display\` kind "apps";
+"open the fees dashboard" → \`app_open\`. Remove only on his word.
+Changing how YOU look — colours, the reactor, what is on screen — is the
+ui_* tools, and what he sets stays until he says otherwise (ui_reset puts
+the stock look back). Changes to your own code are not yours to make.
 
 What the practice has learned (jarvis_knowledge):
 - Before advising on a site, a route or a risk: \`playbook\` for the council
@@ -1216,6 +1240,27 @@ const mailOpts = { outbox, notify: (text) => surfaces.notify(text) }
 
 /** The planning tracker — one file, shared by every session, the inbox watcher and the dashboard. */
 const tracker = createTracker()
+/** The apps JARVIS builds for Salman — dashboards and tools that live inside JARVIS, shared PC and Mac. */
+const apps = createApps()
+/** What an app may read, by name, through the face: live, never a copy. undefined = no such source. */
+async function appData(source) {
+  switch (source) {
+    case 'tracker':
+      return { applications: tracker.list({ all: true }) }
+    case 'specline':
+      return speclineConfigured() ? await speclineOverview() : { error: 'Specline is not connected' }
+    case 'jobs':
+      return { jobs: listJobs().map(({ path, ...j }) => j) }
+    case 'knowledge':
+      return { outcomes: knowledgeStore.outcomes(), lessons: knowledgeStore.approvedLessons(), pending: knowledgeStore.pendingLessons().length }
+    case 'chats':
+      return { chats: await chats.list({}) }
+    case 'apps':
+      return { apps: apps.list() }
+    default:
+      return undefined
+  }
+}
 
 /** Past conversations, to look back over and carry on (bridge/chats.mjs). */
 const chats = createChats({ indexFile: join(process.cwd(), 'data', 'chats.json'), jobs: () => listJobs() })
@@ -1330,6 +1375,8 @@ function makeSession(kind, opts = {}) {
             jarvis_tracker: trackerServer({ tracker, accounts: () => mailAccounts(process.env).filter((a) => a.host) }),
             // Specline, read-only here: this session also works through incoming email.
             jarvis_specline: speclineServer(),
+            // Apps can be built and changed from the phone; they show at the desk.
+            jarvis_apps: appsServer({ apps, notify: (slug) => broadcast({ type: 'app', slug }) }),
           },
           systemPrompt: {
             type: 'preset',
@@ -1421,6 +1468,7 @@ const handleRequest = async (req, res) => {
         configuredModel: MODEL,
         personality: getMode(),
         specline: { configured: speclineConfigured() },
+        apps: { count: apps.list().length },
         tracker: (() => {
           try {
             const apps = tracker.list()
@@ -1602,6 +1650,24 @@ const handleRequest = async (req, res) => {
     return restartBridge('asked from the page')
       ? reply(200, { ok: true })
       : reply(409, { error: 'JARVIS was not started by npm start, so it cannot start itself again — restart it at the PC once' })
+  }
+
+  // Apps JARVIS built: the list, each app's document and files (served under a
+  // CSP that forbids connections), live data fetched by the face on an app's
+  // behalf, and the app's saved state.
+  if (req.url === '/apps' || req.url?.startsWith('/apps/')) {
+    const handled = await appsRoutes(req, res, {
+      apps,
+      cors,
+      readRaw,
+      data: appData,
+      selfOrigins: (r) => {
+        const host = String(r.headers['x-forwarded-host'] ?? r.headers.host ?? '')
+        const proto = String(r.headers['x-forwarded-proto'] ?? 'http')
+        return [...new Set([`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`, ...(host ? [`${proto}://${host}`] : [])])]
+      },
+    })
+    if (handled) return
   }
 
   // Chat history: the list, one conversation, and renaming or archiving one.
@@ -2319,6 +2385,12 @@ wss.on('connection', (socket, req) => {
         jarvis_specline: speclineServer({
           allowWrite: true,
           openDashboard: () => send({ type: 'blade', blade: { id: 'specline', title: 'SPECLINE', kind: 'specline', size: 'full', hold: 'sticky' } }),
+        }),
+        // Apps JARVIS builds for Salman: dashboards and tools inside JARVIS.
+        jarvis_apps: appsServer({
+          apps,
+          openApp: (slug, name) => send({ type: 'blade', blade: { id: `app:${slug}`, title: String(name).toUpperCase(), kind: 'app', slug, size: 'full', hold: 'sticky' } }),
+          notify: (slug) => broadcast({ type: 'app', slug }),
         }),
       },
       // Claude Code's own system prompt with the persona appended, rather

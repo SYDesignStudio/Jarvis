@@ -47,11 +47,42 @@ If it is "film": you are the film JARVIS. Everything above still applies, plus:
 /** The briefing can be long: a day's emails, the jobs list, the diary. */
 export const MAX_BRIEFING = 8000
 
+export const TOP_UP = 'top up at dashboard.retellai.com → Billing'
+
+/**
+ * What a Retell refusal means, in words Salman can act on. A 402 is the
+ * account out of credit: every call fails until it is topped up, and from
+ * 6 Oct 2026 that failed silently for a fortnight.
+ */
+export function phoneError(err) {
+  const m = String(err?.message ?? err ?? '')
+  if (/\b402\b/.test(m) || /credit balance exhausted/i.test(m)) return { credit: false, why: `Retell has no credit left, so no call can be placed — ${TOP_UP}` }
+  return { credit: null, why: m }
+}
+
+/**
+ * Probe the balance without placing a call: ask Retell to dial FROM a number
+ * this account does not own. Out of credit it answers 402 before looking at
+ * the numbers; in credit it refuses the unknown number. Either way nobody rings.
+ */
+export async function probeCredit(retell) {
+  try {
+    await retell.createPhoneCall({ from_number: '+10000000000', to_number: '+10000000001', metadata: { purpose: 'credit-probe' } })
+    return true // should not happen; if it does, the account can certainly place calls
+  } catch (err) {
+    const e = phoneError(err)
+    if (e.credit === false) return false
+    return /retell POST \/v2\/create-phone-call: 4\d\d/.test(String(err?.message)) ? true : null
+  }
+}
+
 export function createAlertCalls({ apiKey, fromNumber, myNumber, voiceId, model = 'gpt-4.1', statePath, log = console.log }) {
   if (!apiKey || !fromNumber || !myNumber) return null
   const retell = createRetell({ apiKey })
   let ids = readIds()
   let last = { at: 0, ok: false, why: '' }
+  /** true = calls can be placed; false = out of credit; null = not known yet. */
+  let credit = { ok: null, at: 0 }
 
   function readIds() {
     try {
@@ -121,13 +152,18 @@ export function createAlertCalls({ apiKey, fromNumber, myNumber, voiceId, model 
   async function callMe(text, { force = false } = {}) {
     // Quiet hours are for alerts the user did not ask for. A test they just
     // asked for is not one of those.
-    if (!force && !inCallHours()) return { ok: false, why: `outside call hours (${CALL_HOURS.from}:00–${CALL_HOURS.to}:00)` }
+    if (!force && !inCallHours()) {
+      last = { at: Date.now(), ok: false, why: `held: outside call hours (${CALL_HOURS.from}:00–${CALL_HOURS.to}:00)` }
+      return { ok: false, why: `outside call hours (${CALL_HOURS.from}:00–${CALL_HOURS.to}:00)` }
+    }
     let agentId
     try {
       agentId = await ensureAgent()
     } catch (err) {
-      last = { at: Date.now(), ok: false, why: err.message }
-      return { ok: false, why: `could not set up the phone agent: ${err.message}` }
+      const e = phoneError(err)
+      if (e.credit === false) credit = { ok: false, at: Date.now() }
+      last = { at: Date.now(), ok: false, why: e.why }
+      return { ok: false, why: e.credit === false ? e.why : `could not set up the phone agent: ${e.why}` }
     }
     let call
     try {
@@ -140,9 +176,12 @@ export function createAlertCalls({ apiKey, fromNumber, myNumber, voiceId, model 
         metadata: { purpose: 'alert' },
       })
     } catch (err) {
-      last = { at: Date.now(), ok: false, why: err.message }
-      return { ok: false, why: err.message }
+      const e = phoneError(err)
+      if (e.credit === false) credit = { ok: false, at: Date.now() }
+      last = { at: Date.now(), ok: false, why: e.why }
+      return { ok: false, why: e.why, noCredit: e.credit === false }
     }
+    credit = { ok: true, at: Date.now() }
     // Watch it to the end, so the receipt says what actually happened. A
     // briefing call can run a while, so this waits up to twenty minutes.
     const started = Date.now()
@@ -173,10 +212,17 @@ export function createAlertCalls({ apiKey, fromNumber, myNumber, voiceId, model 
     }
   }
 
+  async function checkCredit() {
+    const ok = await probeCredit(retell)
+    if (ok !== null) credit = { ok, at: Date.now() }
+    return credit.ok
+  }
+
   return {
     callMe,
     ensureAgent,
     inCallHours,
-    diag: () => ({ configured: true, agent: Boolean(ids.agentId), inCallHours: inCallHours(), lastCall: last }),
+    checkCredit,
+    diag: () => ({ configured: true, agent: Boolean(ids.agentId), inCallHours: inCallHours(), lastCall: last, credit: credit.ok, creditCheckedAt: credit.at }),
   }
 }

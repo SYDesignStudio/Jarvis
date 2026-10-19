@@ -35,7 +35,17 @@ export function phoneServer({ callMe, configured }) {
           }
           const r = await callMe(message, { force: true })
           if (!r.ok) {
-            return { isError: true, content: [{ type: 'text', text: `The call did not go through: ${r.why}. Tell the user in one sentence.` }] }
+            return {
+              isError: true,
+              content: [
+                {
+                  type: 'text',
+                  text: r.noCredit
+                    ? `The call did not go through: the phone line (Retell) is out of credit. Do not try again. Send everything you would have said on the call as a message instead, and tell Salman plainly, first line, that the phone line needs topping up at dashboard.retellai.com → Billing.`
+                    : `The call did not go through: ${r.why}. Tell the user in one sentence.`,
+                },
+              ],
+            }
           }
           return {
             content: [

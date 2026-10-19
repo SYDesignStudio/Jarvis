@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createTelegram } from './telegram.mjs'
 import { createMailWatcher, accountsFromEnv } from './mail.mjs'
-import { createAlertCalls, inCallHours } from './alertcall.mjs'
+import { createAlertCalls, inCallHours, TOP_UP } from './alertcall.mjs'
 import { leadPrompt } from './leads.mjs'
 import { councilPrompt } from './council.mjs'
 import { attachmentBlock, documentsPrompt } from './attachments.mjs'
@@ -157,6 +157,7 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
     )
     .filter(Boolean)
   const mail = mailboxes.length ? mailboxes : null
+  let creditTimer = null
 
   async function deliver(m, verdict, account) {
       // A new enquiry goes to the full JARVIS, who triages it and rings. Without
@@ -207,7 +208,9 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
         const r = await phone.callMe(briefing)
         const receipt = r.ok
           ? `Called you — answered, ${r.seconds}s.`
-          : `Could not reach you by phone: ${r.why}.`
+          : r.noCredit
+            ? `I tried to ring you about this but the phone line is out of credit — ${TOP_UP}.`
+            : `Could not reach you by phone: ${r.why}.`
         log(`[jarvis:phone] ${receipt}`)
         if (telegram) await telegram.notify(receipt, { silent: true })
         if (r.ok && r.reply) await afterCall(r.reply)
@@ -225,9 +228,32 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
       if (listen) for (const box of mailboxes) box.start()
       else log('[jarvis] satellite: the PC owns Telegram and the inbox watchers; this JARVIS sends but does not listen')
       if (phone) log(`[jarvis] phone alerts ready — calls between ${8}:00 and ${21}:00`)
+      // The phone account can run dry with nothing else going wrong. Look at
+      // start and every six hours; while it is empty, say so on Telegram once
+      // a day — a missed alert call is exactly the failure nobody notices.
+      if (phone && listen) {
+        let warnedAt = 0
+        const watchCredit = async () => {
+          const ok = await phone.checkCredit().catch(() => null)
+          if (ok === false) {
+            log(`[jarvis:phone] Retell is out of credit — alert calls cannot be placed (${TOP_UP})`)
+            if (telegram && Date.now() - warnedAt > 20 * 3600_000) {
+              warnedAt = Date.now()
+              await telegram.notify(`Sir, the phone line is out of credit, so I cannot ring you with alerts. Please ${TOP_UP}. Until then everything comes here instead.`)
+            }
+          } else if (ok === true && warnedAt) {
+            warnedAt = 0
+            log('[jarvis:phone] Retell credit is back — alert calls can be placed again')
+            if (telegram) await telegram.notify('The phone line has credit again, sir. Alert calls are back on.', { silent: true })
+          }
+        }
+        void watchCredit()
+        creditTimer = setInterval(() => void watchCredit(), 6 * 3600_000)
+      }
       if (!telegram && !mail && !phone) log('[jarvis] no surfaces configured (Telegram, mail, phone) — see .env.example')
     },
     stop() {
+      if (creditTimer) clearInterval(creditTimer)
       telegram?.stop()
       for (const box of mailboxes) box.stop()
       summariser?.close()

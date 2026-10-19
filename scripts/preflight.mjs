@@ -383,7 +383,8 @@ if (diag?.satellite) {
   }
 
   if (!s.phone.configured) meh('phone alerts not configured (RETELL_API_KEY, RETELL_FROM_NUMBER, JARVIS_MY_NUMBER)')
-  else ok(`phone alerts configured${s.phone.agent ? ', Retell agent created' : ' (agent will be created on first call)'}${s.phone.inCallHours ? '' : ' — outside call hours now'}`)
+  else if (s.phone.credit === false) bad('phone alerts: Retell is out of credit — every alert call is refused', 'top up at dashboard.retellai.com → Billing; JARVIS checks again within six hours, or restart it')
+  else ok(`phone alerts configured${s.phone.agent ? ', Retell agent created' : ' (agent will be created on first call)'}${s.phone.credit === true ? ', credit OK' : ''}${s.phone.inCallHours ? '' : ' — outside call hours now'}`)
 
   if (NOTIFY && s.telegram.configured) {
     try {

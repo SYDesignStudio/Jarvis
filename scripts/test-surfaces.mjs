@@ -892,6 +892,20 @@ test('apps: the routes list, serve the document with CSP, hand out data, refuse 
   assert.equal((await hit('/apps/nope/')).status, 404)
 })
 
+test('phone: running out of Retell credit is named, probed without ringing anyone, and never mistaken for a working line', async () => {
+  const { phoneError, probeCredit, TOP_UP } = await import('../bridge/surfaces/alertcall.mjs')
+  const e = phoneError(new Error('retell POST /v2/create-phone-call: 402 {"status":"error","message":"Credit balance exhausted, please top up to continue."}'))
+  assert.equal(e.credit, false)
+  assert.ok(e.why.includes(TOP_UP), 'says what to do')
+  assert.equal(phoneError(new Error('retell POST /v2/create-phone-call: 400 invalid number')).credit, null)
+  const asked = []
+  const fake = (status) => ({ createPhoneCall: async (b) => { asked.push(b); throw new Error('retell POST /v2/create-phone-call: ' + status + ' x') } })
+  assert.equal(await probeCredit(fake(402)), false)
+  assert.equal(await probeCredit(fake(404)), true, 'an unknown from-number refused means the account itself is fine')
+  assert.equal(await probeCredit({ createPhoneCall: async () => { throw new Error('fetch failed') } }), null, 'no network → unknown, not a false alarm')
+  assert.ok(asked.every((b) => b.from_number === '+10000000000'), 'the probe dials from a number the account cannot own')
+})
+
 let failed = 0
 for (const { name, fn } of tests) {
   try {

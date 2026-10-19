@@ -64,6 +64,17 @@ test('a client email is important; enforcement from a council is urgent', () => 
   const c = classify({ from: 'Chloe Vickers <c.vickers@basingstoke.gov.uk>', subject: 'Discharge of condition 3', text: '' }, ctx)
   assert.equal(c?.level, 'important')
 })
+test('Companies House and HMRC are company admin, never a council or a planning job', () => {
+  const ch = classify({ from: 'Companies House <ereminders@companieshouse.gov.uk>', subject: 'eReminder service activated', text: 'Plancheck Recruitment Ltd 17526964 planning your filing' }, ctx)
+  assert.deepEqual(ch, { level: 'important', why: ['company admin'] }, 'no "council", so it never runs the council routine or opens a project')
+  const pen = classify({ from: 'Companies House <noreply@companieshouse.gov.uk>', subject: 'Late filing penalty', text: 'Your accounts are overdue' }, ctx)
+  assert.equal(pen?.level, 'urgent')
+  assert.ok(!pen.why.includes('council'))
+  assert.deepEqual(classify({ from: 'HMRC <online.services@hmrc.gov.uk>', subject: 'Your VAT return', text: '' }, ctx)?.why, ['company admin'])
+  // councils are unchanged, and the Planning Inspectorate is still planning work
+  assert.ok(classify({ from: 'Appeals <appeals@planninginspectorate.gov.uk>', subject: 'Appeal start date', text: '' }, ctx)?.why.includes('council'))
+  assert.equal(classify({ from: 'Planning <planning@hounslow.gov.uk>', subject: 'Enforcement notice — 14 Wolsey Close', text: '' }, ctx)?.level, 'urgent')
+})
 test('newsletters, shops and strangers are not important', () => {
   assert.equal(classify({ from: 'Amazon <no-reply@amazon.co.uk>', subject: 'Your order', text: 'invoice' }, ctx), null)
   assert.equal(classify({ from: 'Someone <x@gmail.com>', subject: 'Hello', text: 'hi' }, ctx), null)

@@ -21,6 +21,18 @@ import { saveAttachments } from './attachments.mjs'
 export const MAIL_POLL_MS = 5 * 60_000
 
 const COUNCIL = /\.gov\.uk$|council|planning|buildingcontrol|building-control/i
+/**
+ * National bodies that write from gov.uk about the COMPANIES, not about a
+ * planning job: Companies House, HMRC and the like. Every gov.uk sender used
+ * to count as a council, so a Companies House eReminder for Plancheck
+ * Recruitment Ltd ran the council routine and opened a planning project for
+ * the company (18 Oct 2026). These are company admin: told to Salman, never
+ * matched to a project. The Planning Inspectorate is NOT here — appeals are
+ * planning work.
+ */
+const COMPANY_ADMIN = /(^|\.)(companieshouse|hmrc|ipo|insolvency|thepensionsregulator|tpr|dvla|ico)\.gov\.uk$|(^|\.)ico\.org\.uk$/i
+/** What makes company-admin mail worth a call rather than a message. */
+const ADMIN_URGENT = /\b(penalty|late filing|overdue|final notice|strike[- ]off|struck off|striking off|dissolution|enforcement)\b/i
 const MONEY_TROUBLE =
   /\b(enforcement|refus(ed|al)|decision|appeal|notice|condition|deadline|invoice|payment|overdue|urgent|immediately|final|court|complaint|breach|stop notice|discharge)\b/i
 const URGENT = /\b(enforcement|refus(ed|al)|deadline|final notice|stop notice|court|urgent|immediately|breach)\b/i
@@ -78,7 +90,17 @@ export function classify({ from = '', subject = '', text = '' }, ctx) {
 
   const client = ctx.clients.find((c) => nameMatches(c, f))
   const place = ctx.places.find((p) => body.includes(p))
-  const council = COUNCIL.test(domain) || COUNCIL.test(f)
+  const admin = COMPANY_ADMIN.test(domain)
+  const council = !admin && (COUNCIL.test(domain) || COUNCIL.test(f))
+  const councilDomain = !admin && COUNCIL.test(domain)
+
+  // Companies House, HMRC and the like: company admin, never a planning job
+  // and never a new enquiry. A message, or a call if it threatens a penalty
+  // or a strike-off.
+  if (admin) {
+    const trouble = body.match(ADMIN_URGENT)?.[0]
+    return { level: trouble ? 'urgent' : 'important', why: ['company admin', ...(trouble ? [trouble] : [])] }
+  }
 
   // A new enquiry, from someone who is not already a client or a council.
   const fromService = LEAD_SOURCE.test(`${f} ${s}`)
@@ -89,17 +111,17 @@ export function classify({ from = '', subject = '', text = '' }, ctx) {
     }
   }
 
-  if (NOISE.test(f) && !COUNCIL.test(domain)) return null
+  if (NOISE.test(f) && !councilDomain) return null
 
   const why = []
   if (client) why.push(`client ${client}`)
   if (council) why.push('council')
   if (place) why.push(`job ${place}`)
   const trouble = body.match(MONEY_TROUBLE)?.[0]
-  if (trouble && (client || place || COUNCIL.test(domain))) why.push(trouble)
+  if (trouble && (client || place || councilDomain)) why.push(trouble)
 
   if (!why.length) return null
-  const urgent = URGENT.test(body) && (client || place || COUNCIL.test(domain) || COUNCIL.test(f))
+  const urgent = URGENT.test(body) && (client || place || council)
   return { level: urgent ? 'urgent' : 'important', why }
 }
 

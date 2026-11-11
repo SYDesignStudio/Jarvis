@@ -10,7 +10,7 @@ import { z } from 'zod'
  * agent that knows nothing but the message it is given; it reads it, answers
  * questions about it, takes a reply, and hangs up. The reply comes back here.
  */
-export function phoneServer({ callMe, configured }) {
+export function phoneServer({ callMe, configured, queueMorning = null }) {
   return createSdkMcpServer({
     name: 'jarvis_phone',
     version: '1.0.0',
@@ -59,6 +59,24 @@ export function phoneServer({ callMe, configured }) {
           }
         },
       ),
+      ...(queueMorning
+        ? [
+            tool(
+              'queue_morning_call',
+              'Outside calling hours (before 8am, after 9pm): hold a briefing to be RUNG at 8am, in one morning call with anything else queued. ' +
+                'Use it for what Salman wants rung about — a validation or registration letter, an officer\'s request or comments, a decision, ' +
+                'a new enquiry, an employer wanting candidates — whenever call_me is not allowed. message = the briefing as the voice should ' +
+                'read it (what it is, what it asks, what you did, what you need from him), headline first; about = a short label such as ' +
+                '"26/0772/FFU validated" so the same matter is not queued twice. Inside calling hours use call_me instead.',
+              { message: z.string().min(1), about: z.string().optional() },
+              async ({ message, about }) => {
+                if (!configured()) return { isError: true, content: [{ type: 'text', text: 'The phone line is not configured, so nothing can be queued; say so.' }] }
+                const n = await queueMorning(message, { about: about ?? '' })
+                return { content: [{ type: 'text', text: `Queued for the 8am call (${n} item${n === 1 ? '' : 's'} waiting). Tell Salman you will ring him about it at eight.` }] }
+              },
+            ),
+          ]
+        : []),
     ],
   })
 }

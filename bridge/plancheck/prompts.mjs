@@ -100,6 +100,7 @@ export function plancheckMailPrompt(mail, { account = '', matches = [], now = ne
     '4. "Stop contacting me", "remove my details", "not interested" → plancheck_do_not_contact. No further email beyond a one-line acknowledgement if they asked something.',
     '5. An automatic reply → note it against the record (plancheck_note) and, if it names a managed service provider or another route, record that; nothing else.',
     '6. Any email you send is held for Salman — say so. Then one Telegram message: who, what they said, what you did, what Salman must decide. Plain text, short. Never mention SY Design Studio, and never put Salman\'s surname in anything Plancheck.',
+    '7. RING HIM about an employer who replies wanting candidates, the terms, or a call, or who agrees the terms, and about a candidate who registers or says yes to a role: call_me inside calling hours (8am–9pm), queue_morning_call outside them (about = the organisation or the candidate id). Auto-replies, bounces, newsletters and "not interested" do not ring.',
   ].join('\n')
 }
 

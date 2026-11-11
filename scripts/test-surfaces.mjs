@@ -249,7 +249,7 @@ test('council emails: references found, email fenced, draft never sent, calls on
   assert.ok(/NEVER send/.test(day) && /Do NOT use the Gmail connector/.test(day))
   assert.ok(/Never say a drawing complies/.test(day))
   assert.ok(/\[date — Salman to confirm\]/.test(day), 'never promises a date')
-  assert.ok(day.includes('call_me') && /do NOT ring/.test(night))
+  assert.ok(day.includes('call_me') && /do NOT call_me/.test(night))
   assert.ok(/read receipt/.test(day), 'routine mail is filed quietly')
 })
 test('the NAS is read-only: writes blocked, reads and copies off it allowed', async () => {
@@ -931,7 +931,7 @@ test('mail backlog: a pile after a gap is one event, with one prompt that quotes
   assert.ok(p.indexOf('--- 1. [URGENT]') < p.indexOf('--- 2. [COUNCIL]') && p.indexOf('--- 2.') < p.indexOf('--- 4. [NEW ENQUIRY]'), 'oldest first, numbered')
   assert.ok(p.includes('attachment: notice.pdf — saved at'), 'attachments named with their saved path')
   assert.ok(p.includes('tracker_update') && p.includes('record_outcome') && p.includes('ONE Telegram message'), 'the instructions')
-  assert.ok(p.includes('do NOT ring'), 'outside call hours it must not ring')
+  assert.ok(p.includes('do NOT call_me'), 'outside call hours it must not ring')
   assert.ok(backlogPrompt(items, { callAllowed: true }).includes('ONLY if something is both urgent and due within three working days'), 'in hours, one call at most')
   // a very long pile: the first ones quoted, the rest one line each
   const pile = Array.from({ length: 80 }, (_, i) => mk(i, 'important', ['council'], 'x'.repeat(1700)))
@@ -1106,6 +1106,37 @@ test('plancheck agent: jobs queue one at a time, run on their own session, repor
   assert.match(last.error, /OAuth/)
   assert.ok(notes.at(-1).includes('failed'), 'a failure is reported, not hidden')
   assert.equal(w.status().running, null, 'the queue is free again after a failure')
+})
+
+test('morning call: what lands overnight is rung once at eight, the same matter once, retried twice, then left on the phone', async () => {
+  const { createMorningQueue } = await import('../bridge/surfaces/morning.mjs')
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  let hours = false
+  const calls = []
+  const notes = []
+  let answer = { ok: true, seconds: 90, reply: '' }
+  const q = createMorningQueue({ file: join(mkdtempSync(join(tmpdir(), 'mc-')), 'morning-calls.json'), callMe: async (t) => (calls.push(t), answer), inCallHours: () => hours, notify: async (t) => notes.push(t), log: () => {} })
+  assert.equal(q.add('26/0772/FFU at Longmeadow has been validated; decision due 17 November.', { about: '26/0772/FFU validated' }), 1)
+  assert.equal(q.add('Same letter read again.', { about: '26/0772/FFU validated' }), 1, 'the same matter is not queued twice')
+  assert.equal(q.add('New enquiry from Kim in Caterham: rear extension, wants a fixed fee.', { about: 'Kim' }), 2)
+  assert.equal(await q.tick(), undefined, 'nothing rings outside hours')
+  assert.equal(calls.length, 0)
+  hours = true
+  const r = await q.tick()
+  assert.equal(r.rang, true)
+  assert.equal(calls.length, 1, 'one call for both items')
+  assert.ok(calls[0].startsWith('Good morning, sir. 2 things came in'))
+  assert.ok(calls[0].includes('1. 26/0772/FFU validated.') && calls[0].includes('2. Kim.'))
+  assert.equal(q.list().length, 0, 'cleared once answered')
+  // not answered: tried again later, then given up on the phone and sent as a message
+  q.add('Officer comments on 68 Hanworth Road.', { about: 'P/2026/2817' })
+  answer = { ok: false, why: 'not answered (dial_no_answer)' }
+  assert.equal((await q.tick()).rang, false)
+  assert.equal(q.list().length, 1, 'kept for another try')
+  assert.equal(await q.tick(), undefined, 'not before the retry delay')
+  await new Promise((r) => setTimeout(r, 10))
 })
 
 let failed = 0

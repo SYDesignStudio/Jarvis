@@ -34,7 +34,7 @@ export function leadPrompt(mail, { account = '', callAllowed = false, now = new 
     '5. Work out the next step and the options — for example: call them back first; a fee proposal for a site visit, measured survey and assessment; full property research; a feasibility report; a permitted development assessment leading to a Lawful Development Certificate. Recommend ONE, with a one-line reason, and list the others. Pick out exactly what they asked for.',
     callAllowed
       ? '6. Ring Salman with call_me. The briefing: who it is and how they got in touch; the property; what they want and the specific questions they asked; what the site checks found; your recommended next step and the alternatives; and what you need from him (usually the fee, or whether to go ahead with research or a feasibility report). The voice on the call will ask what he wants done — after the call, carry out what he said.'
-      : '6. It is outside call hours, so do NOT call. Send the same briefing here as a message instead, and offer to ring him at 8am.',
+      : '6. It is outside call hours, so do NOT call_me. Send the same briefing here as a message, and queue_morning_call with it (about = the enquirer\'s name) so he is rung about it at 8am.',
     '7. Record your recommendation under "Options and route" and whatever Salman decides under "Discussion and decisions" in the project file.',
     'Never reply to the sender yourself and never send them anything; Salman decides.',
   ].join('\n')

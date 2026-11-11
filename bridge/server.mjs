@@ -1448,7 +1448,7 @@ function makeSession(kind, opts = {}) {
             jarvis_notes: notesServer(),
             jarvis_mail: mailServer(process.env, mailOpts),
             jarvis_diary: reminders.makeServer(),
-            jarvis_phone: phoneServer({ callMe: (t, o) => surfaces.callMe(t, o), configured: () => surfaces.diag().phone.configured }),
+            jarvis_phone: phoneServer({ callMe: (t, o) => surfaces.callMe(t, o), configured: () => surfaces.diag().phone.configured, queueMorning: (t, o) => surfaces.queueMorningCall(t, o) }),
             jarvis_history: historyServer(),
             jarvis_proposals: proposalsServer({ sendDocument: (p, c) => surfaces.sendDocument(p, c) }),
             jarvis_research: researchServer({ sendDocument: (p, c) => surfaces.sendDocument(p, c) }),
@@ -2453,7 +2453,7 @@ wss.on('connection', (socket, req) => {
         // carry out his spoken "send them" on held email.
         jarvis_mail: mailServer(process.env, { ...mailOpts, allowSend: true }),
         jarvis_diary: reminders.makeServer(),
-        jarvis_phone: phoneServer({ callMe: (t, o) => surfaces.callMe(t, o), configured: () => surfaces.diag().phone.configured }),
+        jarvis_phone: phoneServer({ callMe: (t, o) => surfaces.callMe(t, o), configured: () => surfaces.diag().phone.configured, queueMorning: (t, o) => surfaces.queueMorningCall(t, o) }),
         jarvis_history: historyServer(),
         jarvis_proposals: proposalsServer({ sendDocument: (p, c) => surfaces.sendDocument(p, c) }),
         jarvis_research: researchServer({ sendDocument: (p, c) => surfaces.sendDocument(p, c) }),

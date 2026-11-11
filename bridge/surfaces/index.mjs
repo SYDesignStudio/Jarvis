@@ -4,6 +4,7 @@ import { createTelegram } from './telegram.mjs'
 import { createMailWatcher, accountsFromEnv } from './mail.mjs'
 import { createAlertCalls, inCallHours, TOP_UP } from './alertcall.mjs'
 import { backlogPrompt } from './backlog.mjs'
+import { createMorningQueue } from './morning.mjs'
 import { isPlancheckAccount, plancheckClassify, plancheckMailPrompt, PLANCHECK_BACKLOG_STEPS } from '../plancheck/index.mjs'
 import { leadPrompt } from './leads.mjs'
 import { councilPrompt } from './council.mjs'
@@ -86,6 +87,21 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
     statePath: join(dataDir, 'retell.json'),
     log,
   })
+
+  /** What lands outside calling hours is rung in one call at 8am. */
+  const morning = phone
+    ? createMorningQueue({
+        file: join(dataDir, 'morning-calls.json'),
+        callMe: async (text) => {
+          const r = await phone.callMe(text)
+          if (r.ok && r.reply) await afterCall(r.reply)
+          return r
+        },
+        inCallHours,
+        notify: (t, o) => (telegram ? telegram.notify(t, o) : Promise.resolve(false)),
+        log,
+      })
+    : null
 
   let summariser = null
   const summarise = async (mail, verdict) => {
@@ -267,11 +283,14 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
           `URGENT EMAIL.\n${summary}\n\nThe email in full:\nFrom: ${m.from}\nSubject: ${m.subject}\n${m.text.slice(0, 3000)}\n\n` +
           `Jobs list for context:\n${jobsMarkdown().slice(0, 3000)}`
         const r = await phone.callMe(briefing)
+        if (!r.ok && /outside call hours/.test(r.why) && morning) morning.add(briefing, { about: m.subject })
         const receipt = r.ok
           ? `Called you — answered, ${r.seconds}s.`
           : r.noCredit
             ? `I tried to ring you about this but the phone line is out of credit — ${TOP_UP}.`
-            : `Could not reach you by phone: ${r.why}.`
+            : /outside call hours/.test(r.why)
+              ? 'Queued for the 8am call.'
+              : `Could not reach you by phone: ${r.why}.`
         log(`[jarvis:phone] ${receipt}`)
         if (telegram) await telegram.notify(receipt, { silent: true })
         if (r.ok && r.reply) await afterCall(r.reply)
@@ -289,6 +308,11 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
       if (listen) for (const box of mailboxes) box.start()
       else log('[jarvis] satellite: the PC owns Telegram and the inbox watchers; this JARVIS sends but does not listen')
       if (phone) log(`[jarvis] phone alerts ready — calls between ${8}:00 and ${21}:00`)
+      if (morning && listen) {
+        morning.start()
+        const waiting = morning.list().length
+        if (waiting) log(`[jarvis:phone] ${waiting} item(s) waiting for the morning call`)
+      }
       // The phone account can run dry with nothing else going wrong. Look at
       // start and every six hours; while it is empty, say so on Telegram once
       // a day — a missed alert call is exactly the failure nobody notices.
@@ -315,6 +339,7 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
     },
     stop() {
       if (creditTimer) clearInterval(creditTimer)
+      morning?.stop()
       telegram?.stop()
       for (const box of mailboxes) box.stop()
       summariser?.close()
@@ -325,11 +350,14 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
     sendDocument: (path, caption) => (telegram ? telegram.sendDocument(path, caption) : Promise.resolve(false)),
     sendFile: (path, caption, opts) => (telegram ? telegram.sendFile(path, caption, opts) : Promise.resolve({ ok: false, why: 'Telegram is not configured' })),
     callMe: (text, opts) => (phone ? phone.callMe(text, opts) : Promise.resolve({ ok: false, why: 'phone not configured' })),
+    /** Hold a briefing for the 8am call. Returns how many are waiting. */
+    queueMorningCall: (text, opts) => (morning ? morning.add(text, opts) : 0),
+    morningQueue: () => (morning ? morning.list() : []),
     checkMailNow: () => Promise.all(mailboxes.map((box) => box.checkNow())),
     diag: () => ({
       telegram: telegram ? telegram.diag() : { configured: false },
       mail: mail ? mailboxes.map((box) => box.diag()) : [],
-      phone: phone ? phone.diag() : { configured: false },
+      phone: phone ? { ...phone.diag(), morningQueue: morning ? morning.list().length : 0 } : { configured: false },
     }),
   }
 }

@@ -106,8 +106,8 @@ export function backlogPrompt(items, { account = '', since = null, seen = items.
     '4. COMPANY ADMIN (Companies House, HMRC and the like) and everything else: one line each in the briefing. No project is opened for these.',
     '5. THE BRIEFING. Send ONE Telegram message (two if it must be long), plain text, in this order: NEEDS YOU — each item with its deadline, soonest first; COUNCILS — what the tracker now shows per application ("valid 22 Sep, decision due 17 Nov"); NEW ENQUIRIES — name, property, want, next step; EVERYTHING ELSE — one line each. Scannable: short lines, no markdown, no preamble, no "I have". Name any email you could not read or act on.',
     callAllowed
-      ? '6. PHONE. Ring with call_me ONLY if something is both urgent and due within three working days, and then ONCE, carrying the whole briefing. Otherwise do not ring: a backlog is read, not announced one email at a time.'
-      : '6. PHONE. It is outside call hours: do NOT ring. Say in the briefing if something is due within three working days, and offer to ring at 8am.',
+      ? '6. PHONE. If NEEDS YOU has anything in it — a council letter, an officer email, an enquiry, a deadline — ring him ONCE with call_me carrying the whole briefing, after the Telegram message. Never one call per email.'
+      : '6. PHONE. It is outside call hours: do NOT call_me. If NEEDS YOU has anything in it, queue_morning_call with the whole briefing (about = "catch-up") so he is rung once at 8am, and say so in the message.',
     'Never email, message or ring a council or a client yourself. Salman reviews and sends.',
   ]
   return [...head, ...blocks, ...tail].join('\n')

@@ -50,11 +50,15 @@ compliance officer who keeps it legal.
   in PLANCHECK/files; \`plancheck_terms_file\` finds it). "Assessment completed:
   PC-0012" → note the result against the candidate; Salman marks the written
   answers in his console.
-- Each week: \`plancheck_search_plan\` gives the searches for new vacancies
-  (Monday) and candidates (Tuesday); run them with WebSearch/WebFetch, record
-  what you find with \`plancheck_add\`, never guess an email address, never
-  touch LinkedIn or Indeed, and report in one Telegram message: new leads by
-  priority, who to email first, closing dates in the next fortnight.
+- THE AGENT: long jobs are not yours to do in the conversation. "Find me
+  employers", "find candidates", "check which adverts are still open", or any
+  Plancheck task that means searching the web or working through many
+  records → \`plancheck_agent\` (leads | candidates | custom with the job in
+  words). It runs in the background, one job at a time, and reports to his
+  phone and the hub; tell him it is running and carry on with whatever else he
+  wants. "How is the agent doing" → \`plancheck_agent_status\`. The agent never
+  sends anything either — its emails are held like yours. The weekly searches
+  (vacancies Monday, candidates Tuesday, 8am) go to the agent on their own.
 - On the phone and in person Salman uses a first name only. Do not add
   "Salman Yousaf" to anything Plancheck.
 `

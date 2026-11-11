@@ -99,8 +99,20 @@
       '<div class="two"><div class="ap-card"><h2>The week</h2><ul class="todo">' +
         ROUTINE.map(([n, name, job]) => '<li class="' + (n === day ? 'today' : '') + '"><span class="day">' + name + '</span><span>' + esc(job) + '</span></li>').join('') +
       '</ul><p class="ap-note">Targets: 25 employer emails, 20 candidate emails, 5 calls, 2 screenings a week. First placement is the aim for week 12.</p>' +
-      '<div class="ap-row">' + btn('Run the vacancy search', 'Plancheck: run the weekly vacancy leads search (plancheck_search_plan leads) and report', true) + btn('Run the candidate search', 'Plancheck: run the weekly candidate search (plancheck_search_plan candidates) and report', true) + '</div></div>' +
-      '<div class="ap-card"><h2>Needs you</h2>' + needs() + '</div></div>'
+      '<div class="ap-row">' + btn('Run the vacancy search', 'Plancheck: have the agent run the vacancy leads search (plancheck_agent leads)', true) + btn('Run the candidate search', 'Plancheck: have the agent run the candidate search (plancheck_agent candidates)', true) + btn('Check which chase-due adverts are still open', 'Plancheck: have the agent (plancheck_agent custom) check every chase-due lead\'s advert: close the ones that have closed with the reason, and list the ones still open with their contact so I can choose who to follow up') + '</div></div>' +
+      '<div class="ap-card"><h2>Needs you</h2>' + needs() + '</div></div>' + agent()
+  }
+  function agent() {
+    const jobs = data.jobs || []
+    const running = jobs.find((j) => j.status === 'running')
+    const queued = jobs.filter((j) => j.status === 'queued')
+    const recent = jobs.filter((j) => j.status === 'done' || j.status === 'failed').slice(0, 3)
+    const when = (iso) => iso ? new Date(iso).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : ''
+    return '<div class="ap-card" style="margin-top:14px"><h2>The agent <span class="sub" style="display:inline">' + (running ? 'running' : queued.length ? queued.length + ' queued' : 'idle') + '</span></h2>' +
+      (running ? '<p class="ap-note">Working on <b>' + esc(running.title) + '</b> since ' + when(running.startedAt) + '. JARVIS stays free; the report comes to your phone and here.</p>' : '') +
+      (queued.length ? '<p class="ap-dim">Queued: ' + queued.map((j) => esc(j.title)).join(' · ') + '</p>' : '') +
+      (recent.length ? recent.map((j) => '<details><summary><span class="st ' + (j.status === 'done' ? 'good' : 'off') + '">' + esc(j.status) + '</span> ' + esc(j.title) + ' <span class="sub" style="display:inline">' + when(j.finishedAt) + (j.costUsd != null ? ' · $' + j.costUsd.toFixed(2) : '') + '</span></summary><pre class="log" style="white-space:pre-wrap;margin:8px 0 0">' + esc(j.report || j.error) + '</pre></details>').join('') : '<p class="ap-dim">No jobs yet. The buttons above hand work to the agent; so does asking JARVIS.</p>') +
+      '</div>'
   }
   function needs() {
     const items = []

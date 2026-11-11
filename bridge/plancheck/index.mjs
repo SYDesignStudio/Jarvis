@@ -13,6 +13,7 @@ import { searchPlan } from './prompts.mjs'
 
 export { createPlancheckStore, isPlancheckAccount, PLANCHECK_ROOT } from './store.mjs'
 export { PLANCHECK_PERSONA, plancheckMailPrompt, PLANCHECK_BACKLOG_STEPS, searchPlan } from './prompts.mjs'
+export { createWorker, WORKER_PROMPT } from './worker.mjs'
 
 /**
  * Every email to the Plancheck mailbox matters — it is a business inbox with
@@ -73,7 +74,7 @@ const SEND_FIELDS = ['first_name', 'name', 'org', 'role', 'discipline', 'discipl
  * The tools. `outbox` holds and sends; `accounts` tells us which mailbox is
  * Plancheck's; `openDashboard` puts the hub on screen (desk only).
  */
-export function plancheckServer({ store, outbox = null, accounts = () => [], openDashboard = null, root = PLANCHECK_ROOT, notify = null } = {}) {
+export function plancheckServer({ store, outbox = null, accounts = () => [], openDashboard = null, root = PLANCHECK_ROOT, notify = null, worker = null } = {}) {
   const text = (t) => ({ content: [{ type: 'text', text: t }] })
   const fail = (t) => ({ isError: true, content: [{ type: 'text', text: t }] })
   const templatesDir = join(root, 'templates')
@@ -246,7 +247,29 @@ export function plancheckServer({ store, outbox = null, accounts = () => [], ope
         const f = termsFile(root)
         return f ? text(f) : text('No Terms of Business file in PLANCHECK/files yet — ask Salman to copy it there (PDF or DOCX with "Terms of Business" in the name).')
       }),
-      tool('plancheck_search_plan', 'The weekly search to carry out with WebSearch/WebFetch: what = leads (vacancies, Mondays) or candidates (Tuesdays). Returns the plan; you do the searching and record with plancheck_add.', { what: z.enum(['leads', 'candidates']) }, async ({ what }) => text(searchPlan(what))),
+      tool('plancheck_search_plan', 'The weekly search plan (what = leads or candidates) — for reading what the agent does. To actually run a search, hand it to the agent with plancheck_agent; only do it yourself if the agent is unavailable.', { what: z.enum(['leads', 'candidates']) }, async ({ what }) => text(searchPlan(what))),
+      ...(worker
+        ? [
+            tool(
+              'plancheck_agent',
+              'Hand a long Plancheck job to the background agent, which runs it in its own session and reports to Salman\'s phone and the hub when done — so you stay free. task = leads (the vacancy search), candidates (the candidate search), or custom with instructions in words (e.g. "check which chase-due adverts are still open and close the ones that are not"). Returns at once with the job number. Use this for anything that means searching the web or working through many records.',
+              { task: z.enum(['leads', 'candidates', 'custom']), instructions: z.string().optional().describe('For custom: the job in full. For leads/candidates: anything extra, e.g. "only Surrey" or "architecture practices only".') },
+              async ({ task, instructions }) => {
+                try {
+                  const { job, duplicate } = worker.enqueue({ kind: task, instructions: instructions ?? '' })
+                  return text(duplicate ? `That job is already ${job.status} as agent job #${job.id} (${job.title}).` : `Agent job #${job.id} queued: ${job.title}. It runs in the background; the report goes to Telegram and the hub when it finishes. Tell Salman it is running — do not wait for it.`)
+                } catch (err) {
+                  return fail(err.message)
+                }
+              },
+            ),
+            tool('plancheck_agent_status', 'How the background agent is getting on: what is running, what is queued, and the last reports.', {}, async () => {
+              const s = worker.status()
+              const fmt = (j) => `#${j.id} ${j.title} — ${j.status}${j.startedAt ? `, started ${j.startedAt.slice(11, 16)}` : ''}${j.finishedAt ? `, finished ${j.finishedAt.slice(11, 16)}` : ''}${j.costUsd != null ? ` ($${j.costUsd.toFixed(2)})` : ''}${j.error ? ` — ${j.error}` : ''}${j.report ? `\n   ${j.report.slice(0, 600).replace(/\n/g, '\n   ')}` : ''}`
+              return text([s.running ? `RUNNING: ${fmt(s.running)}` : 'Nothing running.', s.queued.length ? `QUEUED: ${s.queued.map(fmt).join('; ')}` : '', s.recent.length ? `RECENT:\n${s.recent.map(fmt).join('\n')}` : 'No jobs yet.'].filter(Boolean).join('\n'))
+            }),
+          ]
+        : []),
       ...(openDashboard
         ? [
             tool('plancheck_dashboard', 'Put the Plancheck hub on screen — this week, employers, candidates, leads, pipeline, chase, compliance.', {}, async () => {

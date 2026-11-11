@@ -63,7 +63,7 @@ import { buildGalaxy, satellitesOf } from './memory/galaxy.mjs'
 import { searchMail as searchMailboxes } from './mailtools.mjs'
 import { accountsFromEnv as mailAccounts } from './surfaces/mail.mjs'
 import { createApps, appsServer, appsRoutes } from './apps/index.mjs'
-import { createPlancheckStore, plancheckServer, plancheckGate, PLANCHECK_PERSONA, searchPlan as plancheckSearchPlan, isPlancheckAccount } from './plancheck/index.mjs'
+import { createPlancheckStore, plancheckServer, plancheckGate, PLANCHECK_PERSONA, isPlancheckAccount, createWorker as createPlancheckWorker, WORKER_PROMPT as PLANCHECK_WORKER_PROMPT } from './plancheck/index.mjs'
 import { seedTemplates as seedPlancheckTemplates } from './plancheck/templates.mjs'
 import { writeFileSync as writeFileSyncPc } from 'node:fs'
 import { dirname as dirnamePc } from 'node:path'
@@ -1272,7 +1272,7 @@ async function appData(source) {
     case 'apps':
       return { apps: apps.list() }
     case 'plancheck':
-      return plancheck.snapshot()
+      return { ...plancheck.snapshot(), jobs: plancheckWorker.list(8) }
     default:
       return undefined
   }
@@ -1337,8 +1337,12 @@ if (!SATELLITE) {
     if (r[key]) return
     r[key] = now.toISOString()
     writeFileSyncPc(ranFile, JSON.stringify(r, null, 2))
-    console.log(`[jarvis:plancheck] weekly ${what} search starting`)
-    surfaces.runOnTelegram(plancheckSearchPlan(what)).catch((err) => console.log(`[jarvis:plancheck] ${what} search failed: ${err.message}`))
+    console.log(`[jarvis:plancheck] weekly ${what} search handed to the agent`)
+    try {
+      plancheckWorker.enqueue({ kind: what, by: 'the Monday/Tuesday schedule' })
+    } catch (err) {
+      console.log(`[jarvis:plancheck] ${what} search could not be queued: ${err.message}`)
+    }
   }, 10 * 60_000)
 }
 // Factories, like every other server here: an SDK server instance can serve
@@ -1356,6 +1360,8 @@ const knowledgeQuiet = (job) => knowledgeServer({ store: knowledgeStore, quiet: 
  * makes it read-only anyway), read PDFs, look a job up, and write to the
  * knowledge store. No Bash, no Write, no mail, no browser, no phone.
  */
+/** The Plancheck agent may search, read, and use the Plancheck records — nothing of SY's, nothing that acts on the PC. */
+const PLANCHECK_WORKER_TOOLS = /^(Read|Glob|Grep|WebSearch|WebFetch|TodoWrite|mcp__jarvis_plancheck__(?!plancheck_dashboard|plancheck_agent).*)$/
 const LEARNER_TOOLS = /^(Read|Glob|Grep|mcp__jarvis_knowledge__(record_outcome|propose_lesson|search_outcomes|playbook|policy_note|policies)|mcp__jarvis_research__read_planning_document|mcp__jarvis_memory__(find_job|drawing_pack|project_search))$/
 
 /**
@@ -1380,10 +1386,29 @@ const surfaces = createSurfaces({
   makeSession,
 })
 
+/** The Plancheck agent: long jobs run here in the background, one at a time. */
+const plancheckWorker = createPlancheckWorker({ makeSession, notify: (t, o) => surfaces.notify(t, o), broadcast, log: console.log })
+
 // Hoisted, so the knowledge server above and the surfaces can both reach it;
 // the `surfaces` it refers to exists by the time any session is made.
 function makeSession(kind, opts = {}) {
-  return kind === 'learner'
+  return kind === 'worker'
+      ? createAgentSession({
+          label: 'plancheck-agent',
+          mcpServers: {
+            jarvis_plancheck: plancheckServer({ store: plancheck, outbox, accounts: () => mailAccounts(process.env).filter((a) => a.host), notify: (t, o) => surfaces.notify(t, o) }),
+          },
+          systemPrompt: PLANCHECK_WORKER_PROMPT,
+          model: process.env.JARVIS_WORKER_MODEL ?? MODEL,
+          effort: 'medium',
+          cwd: SESSION_CWD,
+          settingSources: [],
+          tools: ['Read', 'Glob', 'Grep', 'WebSearch', 'WebFetch', 'TodoWrite'],
+          canUse: (name) => PLANCHECK_WORKER_TOOLS.test(name),
+          maxTurns: 90,
+          maxBudgetUsd: opts.maxBudgetUsd ?? 4,
+        })
+      : kind === 'learner'
       ? createAgentSession({
           label: 'learner',
           mcpServers: {
@@ -1436,7 +1461,7 @@ function makeSession(kind, opts = {}) {
             // Specline, read-only here: this session also works through incoming email.
             jarvis_specline: speclineServer(),
             // Plancheck from the phone and from its own inbox: records, held outreach, the gates.
-            jarvis_plancheck: plancheckServer({ store: plancheck, outbox, accounts: () => mailAccounts(process.env).filter((a) => a.host), notify: (t, o) => surfaces.notify(t, o) }),
+            jarvis_plancheck: plancheckServer({ store: plancheck, outbox, accounts: () => mailAccounts(process.env).filter((a) => a.host), notify: (t, o) => surfaces.notify(t, o), worker: plancheckWorker }),
             // Apps can be built and changed from the phone; they show at the desk.
             jarvis_apps: appsServer({ apps, notify: (slug) => broadcast({ type: 'app', slug }) }),
           },
@@ -1534,7 +1559,7 @@ const handleRequest = async (req, res) => {
         plancheck: (() => {
           try {
             const o = plancheck.overview()
-            return { ...o.counts, chaseDue: o.chaseDue, sentToday: o.sentToday, mailbox: mailAccounts(process.env).some((a) => isPlancheckAccount(a.user)) }
+            return { ...o.counts, chaseDue: o.chaseDue, sentToday: o.sentToday, mailbox: mailAccounts(process.env).some((a) => isPlancheckAccount(a.user)), agent: plancheckWorker.status().running ? 'running' : 'idle' }
           } catch {
             return null
           }
@@ -2462,6 +2487,7 @@ wss.on('connection', (socket, req) => {
           outbox,
           accounts: () => mailAccounts(process.env).filter((a) => a.host),
           notify: (t, o) => surfaces.notify(t, o),
+          worker: plancheckWorker,
           openDashboard: () => send({ type: 'blade', blade: { id: 'app:plancheck-hub', title: 'PLANCHECK', kind: 'app', slug: 'plancheck-hub', size: 'full', hold: 'sticky' } }),
         }),
         // Apps JARVIS builds for Salman: dashboards and tools inside JARVIS.

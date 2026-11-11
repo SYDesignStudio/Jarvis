@@ -1061,6 +1061,53 @@ test('plancheck: the brand guard, the classifier for its mailbox, and templates 
   for (const t of Object.values(TEMPLATES)) assert.ok(!/Salman|SY Design/i.test(t.body), 'no template links back to SY')
 })
 
+test('plancheck agent: jobs queue one at a time, run on their own session, report to the phone, survive a failure, and never double up', async () => {
+  const { createWorker } = await import('../bridge/plancheck/worker.mjs')
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const asked = []
+  const notes = []
+  let fail = false
+  const makeSession = (kind, opts) => {
+    assert.equal(kind, 'worker')
+    assert.equal(opts.maxBudgetUsd, 4)
+    return {
+      ask: async (prompt) => {
+        asked.push(prompt)
+        await new Promise((r) => setTimeout(r, 30))
+        if (fail) throw new Error('OAuth session expired')
+        return { text: 'REPORT: 3 new leads, L70–L72.', costUsd: 0.42 }
+      },
+      close: async () => {},
+    }
+  }
+  const w = createWorker({ makeSession, root: mkdtempSync(join(tmpdir(), 'pcw-')), notify: async (t) => notes.push(t), broadcast: () => {}, log: () => {} })
+  const a = w.enqueue({ kind: 'leads' })
+  assert.equal(a.job.id, 1)
+  assert.ok(a.job.prompt.includes('VACANCY LEADS SEARCH'), 'a named search carries its plan')
+  assert.equal(w.enqueue({ kind: 'leads' }).duplicate, true, 'the same search is not queued twice while it waits')
+  const b = w.enqueue({ kind: 'custom', instructions: 'Check which chase-due adverts are still open' })
+  assert.equal(b.job.id, 2)
+  assert.ok(b.job.prompt.startsWith('JOB FROM SALMAN:'))
+  assert.throws(() => w.enqueue({ kind: 'custom' }), /needs instructions/)
+  await new Promise((r) => setTimeout(r, 900))
+  const done = w.list()
+  assert.deepEqual(done.map((j) => [j.id, j.status]), [[2, 'done'], [1, 'done']], 'both ran, in order, one after the other')
+  assert.equal(asked.length, 2)
+  assert.equal(done[1].report, 'REPORT: 3 new leads, L70–L72.')
+  assert.equal(done[1].costUsd, 0.42)
+  assert.ok(notes[0].includes('Vacancy leads search done') && notes[0].includes('L70'), 'the report went to the phone')
+  fail = true
+  w.enqueue({ kind: 'candidates' })
+  await new Promise((r) => setTimeout(r, 400))
+  const last = w.list()[0]
+  assert.equal(last.status, 'failed')
+  assert.match(last.error, /OAuth/)
+  assert.ok(notes.at(-1).includes('failed'), 'a failure is reported, not hidden')
+  assert.equal(w.status().running, null, 'the queue is free again after a failure')
+})
+
 let failed = 0
 for (const { name, fn } of tests) {
   try {

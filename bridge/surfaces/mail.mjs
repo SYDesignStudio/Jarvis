@@ -161,6 +161,28 @@ export function accountsFromEnv(env) {
   return out
 }
 
+/**
+ * The words of an email. Phones send HTML with no plain-text part, and a reply
+ * read as empty was taken for silence — two candidates' answers were missed
+ * that way. The HTML is stripped to text when there is no text part.
+ */
+export function mailText(parsed) {
+  const text = String(parsed?.text ?? '').trim()
+  if (text) return text
+  return String(parsed?.html ?? '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<br\s*\/?>|<\/p>|<\/div>|<\/tr>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#39;|&rsquo;/g, "'")
+    .replace(/&quot;/g, '"')
+    .trim()
+}
+
 // ---------------------------------------------------------------- state
 
 function readState(path) {
@@ -233,14 +255,14 @@ export function createMailWatcher({ user, password, host = 'imap.gmail.com', sta
             from: msg.envelope?.from?.map((a) => `${a.name ?? ''} <${a.address ?? ''}>`).join(', ') ?? '',
             subject: msg.envelope?.subject ?? '',
             date: msg.envelope?.date ?? new Date(),
-            text: (parsed?.text ?? '').replace(/\s+/g, ' ').trim(),
+            text: mailText(parsed).replace(/\s+/g, ' ').trim(),
           }
           // Every new message, important or not, is offered to the tracker:
           // a Planning Portal notification is routine mail, and it is also
           // the record of a submission. Given the body as written, not squashed.
           if (onEvery) {
             try {
-              onEvery({ ...mail, text: parsed?.text ?? '' })
+              onEvery({ ...mail, text: mailText(parsed) })
             } catch (err) {
               log(`[jarvis:mail] tracker hook failed for "${mail.subject}": ${err.message}`)
             }

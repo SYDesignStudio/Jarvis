@@ -932,7 +932,7 @@ test('mail backlog: a pile after a gap is one event, with one prompt that quotes
   assert.ok(p.includes('attachment: notice.pdf — saved at'), 'attachments named with their saved path')
   assert.ok(p.includes('tracker_update') && p.includes('record_outcome') && p.includes('ONE Telegram message'), 'the instructions')
   assert.ok(p.includes('do NOT call_me'), 'outside call hours it must not ring')
-  assert.ok(backlogPrompt(items, { callAllowed: true }).includes('ONLY if something is both urgent and due within three working days'), 'in hours, one call at most')
+  assert.ok(backlogPrompt(items, { callAllowed: true }).includes('ring him ONCE with call_me'), 'in hours, one call at most')
   // a very long pile: the first ones quoted, the rest one line each
   const pile = Array.from({ length: 80 }, (_, i) => mk(i, 'important', ['council'], 'x'.repeat(1700)))
   const big = backlogPrompt(pile)

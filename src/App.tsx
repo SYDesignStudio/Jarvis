@@ -856,6 +856,15 @@ export default function App() {
         return
       }
 
+      // C opens the Plancheck hub — Salman's recruitment business, run inside JARVIS — and closes it again.
+      if (key === 'c' && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault()
+        const s = store.getState()
+        if (s.blades.some((b) => b.id === 'app:plancheck-hub')) s.closeBlade('app:plancheck-hub')
+        else s.pushBlade({ id: 'app:plancheck-hub', title: 'PLANCHECK', kind: 'app', slug: 'plancheck-hub', size: 'full', hold: 'sticky' })
+        return
+      }
+
       // G puts the camera on and starts tracking hands. Off by default and
       // never implicit: a webcam that turns itself on because an interface
       // thought it might be useful is not a trade anyone agreed to.

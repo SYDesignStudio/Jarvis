@@ -63,6 +63,11 @@ import { buildGalaxy, satellitesOf } from './memory/galaxy.mjs'
 import { searchMail as searchMailboxes } from './mailtools.mjs'
 import { accountsFromEnv as mailAccounts } from './surfaces/mail.mjs'
 import { createApps, appsServer, appsRoutes } from './apps/index.mjs'
+import { createPlancheckStore, plancheckServer, plancheckGate, PLANCHECK_PERSONA, searchPlan as plancheckSearchPlan, isPlancheckAccount } from './plancheck/index.mjs'
+import { seedTemplates as seedPlancheckTemplates } from './plancheck/templates.mjs'
+import { writeFileSync as writeFileSyncPc } from 'node:fs'
+import { dirname as dirnamePc } from 'node:path'
+import { fileURLToPath as fileURLToPathPc } from 'node:url'
 
 // .env.local is read by env.mjs, the first import above, before any module looks at process.env.
 
@@ -391,7 +396,8 @@ function decideTool(name) {
       server === 'jarvis_knowledge' ||
       server === 'jarvis_specline' ||
       server === 'jarvis_tracker' ||
-      server === 'jarvis_apps'
+      server === 'jarvis_apps' ||
+      server === 'jarvis_plancheck'
     ) {
       return true
     }
@@ -705,6 +711,7 @@ Changing how YOU look — colours, the reactor, what is on screen — is the
 ui_* tools, and what he sets stays until he says otherwise (ui_reset puts
 the stock look back). Changes to your own code are not yours to make.
 
+${PLANCHECK_PERSONA}
 What the practice has learned (jarvis_knowledge):
 - Before advising on a site, a route or a risk: \`playbook\` for the council
   (and the project type) and \`search_outcomes\` for what actually happened
@@ -1230,7 +1237,14 @@ const reminders = createReminders({
  * Zapier does not reach (info@specline.co.uk). One outbox for every session;
  * the Telegram bridge, not the model, carries out the send.
  */
+/** Plancheck Recruitment's records: the one master copy, shared with the Mac. */
+const plancheck = createPlancheckStore()
+seedPlancheckTemplates(join(plancheck.root, 'templates'))
 const outbox = createOutbox({
+  gate: (entry) => plancheckGate(entry, { store: plancheck }),
+  onSent: (entry) => {
+    if (isPlancheckAccount(entry.account)) plancheck.markSent(entry.id)
+  },
   // Held emails are shared work, not this machine's scratch: both bodies see them.
   dir: process.env.JARVIS_OUTBOX_DIR ?? join(WORK_ROOT, 'OUTBOX'),
   accounts: mailAccounts(process.env).filter((a) => a.host),
@@ -1257,6 +1271,8 @@ async function appData(source) {
       return { chats: await chats.list({}) }
     case 'apps':
       return { apps: apps.list() }
+    case 'plancheck':
+      return plancheck.snapshot()
     default:
       return undefined
   }
@@ -1282,6 +1298,49 @@ if (!SATELLITE) {
 }
 
 const knowledgeStore = createKnowledgeStore()
+
+/**
+ * The Plancheck hub is a JARVIS app, seeded and kept current from
+ * bridge/plancheck/hub.html — so it travels with the code. Salman can still
+ * ask JARVIS to change it; a later code change here overwrites that.
+ */
+try {
+  const hubHtml = readFileSync(join(dirnamePc(fileURLToPathPc(import.meta.url)), 'plancheck', 'hub.html'), 'utf8')
+  const have = apps.get('plancheck-hub')
+  if (!have || have.files?.['index.html'] !== hubHtml) {
+    apps.write({ slug: 'plancheck-hub', name: 'Plancheck', description: 'Plancheck Recruitment: this week, leads, employers, candidates, pipeline, chase and compliance — live from the records.', files: { 'index.html': hubHtml } })
+    console.log('[jarvis:plancheck] hub app ' + (have ? 'updated' : 'created'))
+  }
+} catch (err) {
+  console.warn('[jarvis:plancheck] could not seed the hub app: ' + err.message)
+}
+
+/**
+ * The weekly searches: vacancies on Monday, candidates on Tuesday, at 8am,
+ * each once. JARVIS runs them on the Telegram session and reports there.
+ */
+if (!SATELLITE) {
+  const ranFile = join(plancheck.root, 'searches.json')
+  const ran = () => {
+    try {
+      return JSON.parse(readFileSync(ranFile, 'utf8'))
+    } catch {
+      return {}
+    }
+  }
+  setInterval(() => {
+    const now = new Date()
+    const what = now.getDay() === 1 ? 'leads' : now.getDay() === 2 ? 'candidates' : null
+    if (!what || now.getHours() !== 8) return
+    const key = `${what}:${now.toISOString().slice(0, 10)}`
+    const r = ran()
+    if (r[key]) return
+    r[key] = now.toISOString()
+    writeFileSyncPc(ranFile, JSON.stringify(r, null, 2))
+    console.log(`[jarvis:plancheck] weekly ${what} search starting`)
+    surfaces.runOnTelegram(plancheckSearchPlan(what)).catch((err) => console.log(`[jarvis:plancheck] ${what} search failed: ${err.message}`))
+  }, 10 * 60_000)
+}
 // Factories, like every other server here: an SDK server instance can serve
 // one session only, so sharing one would leave the second session without it.
 const knowledge = () =>
@@ -1315,6 +1374,7 @@ const surfaces = createSurfaces({
   knowledge: knowledgeStore,
   outbox,
   tracker,
+  plancheck,
   restart: () => restartBridge('asked on Telegram'),
   listen: !SATELLITE,
   makeSession,
@@ -1375,6 +1435,8 @@ function makeSession(kind, opts = {}) {
             jarvis_tracker: trackerServer({ tracker, accounts: () => mailAccounts(process.env).filter((a) => a.host) }),
             // Specline, read-only here: this session also works through incoming email.
             jarvis_specline: speclineServer(),
+            // Plancheck from the phone and from its own inbox: records, held outreach, the gates.
+            jarvis_plancheck: plancheckServer({ store: plancheck, outbox, accounts: () => mailAccounts(process.env).filter((a) => a.host), notify: (t, o) => surfaces.notify(t, o) }),
             // Apps can be built and changed from the phone; they show at the desk.
             jarvis_apps: appsServer({ apps, notify: (slug) => broadcast({ type: 'app', slug }) }),
           },
@@ -1469,6 +1531,14 @@ const handleRequest = async (req, res) => {
         personality: getMode(),
         specline: { configured: speclineConfigured() },
         apps: { count: apps.list().length },
+        plancheck: (() => {
+          try {
+            const o = plancheck.overview()
+            return { ...o.counts, chaseDue: o.chaseDue, sentToday: o.sentToday, mailbox: mailAccounts(process.env).some((a) => isPlancheckAccount(a.user)) }
+          } catch {
+            return null
+          }
+        })(),
         tracker: (() => {
           try {
             const apps = tracker.list()
@@ -2385,6 +2455,14 @@ wss.on('connection', (socket, req) => {
         jarvis_specline: speclineServer({
           allowWrite: true,
           openDashboard: () => send({ type: 'blade', blade: { id: 'specline', title: 'SPECLINE', kind: 'specline', size: 'full', hold: 'sticky' } }),
+        }),
+        // Plancheck Recruitment: records, templated outreach held for approval, the gates, the hub.
+        jarvis_plancheck: plancheckServer({
+          store: plancheck,
+          outbox,
+          accounts: () => mailAccounts(process.env).filter((a) => a.host),
+          notify: (t, o) => surfaces.notify(t, o),
+          openDashboard: () => send({ type: 'blade', blade: { id: 'app:plancheck-hub', title: 'PLANCHECK', kind: 'app', slug: 'plancheck-hub', size: 'full', hold: 'sticky' } }),
         }),
         // Apps JARVIS builds for Salman: dashboards and tools inside JARVIS.
         jarvis_apps: appsServer({

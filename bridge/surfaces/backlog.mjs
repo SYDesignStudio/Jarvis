@@ -59,7 +59,7 @@ const level = (v) => (v.level === 'urgent' ? 'URGENT' : v.level === 'lead' ? 'NE
  * oldest first; the rest listed in one line each, for the model to open
  * itself if they matter.
  */
-export function backlogPrompt(items, { account = '', since = null, seen = items.length, callAllowed = false, now = new Date() } = {}) {
+export function backlogPrompt(items, { account = '', since = null, seen = items.length, callAllowed = false, now = new Date(), steps = null } = {}) {
   const ordered = [...items].sort((a, b) => new Date(a.mail.date ?? 0) - new Date(b.mail.date ?? 0))
   const counts = { urgent: 0, lead: 0, council: 0, admin: 0, other: 0 }
   for (const { verdict } of ordered) {
@@ -95,7 +95,9 @@ export function backlogPrompt(items, { account = '', since = null, seen = items.
       blocks.push(`--- ${i + 1}. [${level(verdict)}] ${when(mail.date)} · ${clean(mail.from)} · ${clean(mail.subject)} (not quoted — open it with search_mail if it matters)`)
     }
   }
-  const tail = [
+  const tail = steps
+    ? ['', `=== WHAT TO DO (${fullCount} quoted in full, ${ordered.length - fullCount} listed only)`, ...steps]
+    : [
     '',
     `=== WHAT TO DO (${fullCount} quoted in full, ${ordered.length - fullCount} listed only)`,
     '1. COUNCIL LETTERS AND EMAILS. For each one, bring the planning tracker up to date with tracker_update — identify the application by council reference, PP- reference or address, and pass ONLY what the email or its attachment states: councilRef, validated, target (decision-due date), officer, decided + decision, or status "invalid". source = "<email> from <council>, <date>". Open saved attachments that carry dates or decisions before updating. Anything Salman must do → tracker_action with its due date. A decision notice, appeal decision or LDC → record_outcome as well, reasons verbatim.',

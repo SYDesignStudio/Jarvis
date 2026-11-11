@@ -4,6 +4,7 @@ import { createTelegram } from './telegram.mjs'
 import { createMailWatcher, accountsFromEnv } from './mail.mjs'
 import { createAlertCalls, inCallHours, TOP_UP } from './alertcall.mjs'
 import { backlogPrompt } from './backlog.mjs'
+import { isPlancheckAccount, plancheckClassify, plancheckMailPrompt, PLANCHECK_BACKLOG_STEPS } from '../plancheck/index.mjs'
 import { leadPrompt } from './leads.mjs'
 import { councilPrompt } from './council.mjs'
 import { attachmentBlock, documentsPrompt } from './attachments.mjs'
@@ -28,7 +29,7 @@ import { PATHS } from '../paths.mjs'
  * @param {object} [io.knowledge] the knowledge store the sessions share, so a
  *   "yes 12" typed on Telegram lands in the same playbook they read
  */
-export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast, knowledge = createStore(), outbox = null, tracker = null, restart = null, listen = true, log = console.log }) {
+export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast, knowledge = createStore(), outbox = null, tracker = null, plancheck = null, restart = null, listen = true, log = console.log }) {
   const telegram = createTelegram({
     token: env.TELEGRAM_BOT_TOKEN,
     chatId: env.TELEGRAM_CHAT_ID,
@@ -142,6 +143,8 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
         attachDir: join(PATHS.inbox, 'Mail'),
         onImportant: (m, verdict) => deliver(m, verdict, a.user),
         onBacklog: (items, info) => catchUp(items, info, a.user),
+        // Plancheck's inbox has no SY clients to match: everything there matters.
+        ...(isPlancheckAccount(a.user) ? { classifier: plancheckClassify } : {}),
         // Planning Portal notifications go straight onto the tracker — read
         // exactly, by the bridge, with one quiet line to Telegram.
         onEvery: tracker
@@ -192,10 +195,32 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
       log(`[jarvis:mail] catch-up on ${account} is waiting: the Telegram session is still busy`)
       return false
     }
-    return telegram.run(backlogPrompt(items, { account, since, seen, callAllowed: Boolean(phone) && inCallHours() }))
+    return telegram.run(backlogPrompt(items, { account, since, seen, callAllowed: Boolean(phone) && inCallHours(), ...(isPlancheckAccount(account) ? { steps: PLANCHECK_BACKLOG_STEPS } : {}) }))
+  }
+
+  /**
+   * An email to Plancheck Recruitment: one line to the phone, then the full
+   * JARVIS as Plancheck — matching the sender to the records, updating them,
+   * holding any reply. Never a call, never the SY routines.
+   */
+  async function deliverPlancheck(m, verdict, account) {
+    if (!telegram) {
+      log(`[jarvis:plancheck] ${verdict.why.join(', ')} on ${account}: "${m.subject}" — no Telegram, so no session to work it`)
+      return
+    }
+    const from = m.from.replace(/<.*?>/g, '').trim()
+    const addr = (m.from.match(/[\w.+-]+@[\w.-]+\.\w+/) ?? [''])[0].toLowerCase()
+    const matches = []
+    if (plancheck && addr) {
+      for (const kind of ['employers', 'candidates', 'leads']) for (const r of plancheck.list(kind, { q: addr })) matches.push({ kind, ...r })
+    }
+    log(`[jarvis:plancheck] ${verdict.why.join(', ')} on ${account}: "${m.subject}" from ${from}${matches.length ? ` (${matches.map((x) => x.id).join(', ')})` : ''}`)
+    await telegram.notify(`Plancheck: ${from} — ${m.subject}. Working through it now.`, { silent: true })
+    await telegram.run(plancheckMailPrompt(m, { account, matches }))
   }
 
   async function deliver(m, verdict, account) {
+      if (isPlancheckAccount(account)) return deliverPlancheck(m, verdict, account)
       // A new enquiry goes to the full JARVIS, who triages it and rings. Without
       // Telegram there is no session to run it on, so it falls back to a plain
       // alert call below.
@@ -295,6 +320,8 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
       summariser?.close()
     },
     notify: (text, opts) => (telegram ? telegram.notify(text, opts) : Promise.resolve(false)),
+    /** A prompt run as JARVIS on the Telegram session — the weekly Plancheck searches use it. */
+    runOnTelegram: (prompt) => (telegram ? telegram.run(prompt) : Promise.resolve(false)),
     sendDocument: (path, caption) => (telegram ? telegram.sendDocument(path, caption) : Promise.resolve(false)),
     sendFile: (path, caption, opts) => (telegram ? telegram.sendFile(path, caption, opts) : Promise.resolve({ ok: false, why: 'Telegram is not configured' })),
     callMe: (text, opts) => (phone ? phone.callMe(text, opts) : Promise.resolve({ ok: false, why: 'phone not configured' })),

@@ -183,7 +183,7 @@ function writeState(path, state) {
  * @param {() => string} io.jobsMarkdown        current JOBS.md text
  * @param {(mail, verdict) => Promise<void>} io.onImportant  deliver it
  */
-export function createMailWatcher({ user, password, host = 'imap.gmail.com', statePath, jobsMarkdown, onImportant, onBacklog = null, onEvery = null, attachDir = null, pollMs = MAIL_POLL_MS, log = console.log }) {
+export function createMailWatcher({ user, password, host = 'imap.gmail.com', statePath, jobsMarkdown, onImportant, onBacklog = null, onEvery = null, attachDir = null, pollMs = MAIL_POLL_MS, classifier = classify, log = console.log }) {
   if (!user || !password) return null
   let timer = null
   let checking = false
@@ -245,7 +245,7 @@ export function createMailWatcher({ user, password, host = 'imap.gmail.com', sta
               log(`[jarvis:mail] tracker hook failed for "${mail.subject}": ${err.message}`)
             }
           }
-          const verdict = classify(mail, ctx)
+          const verdict = classifier(mail, ctx)
           if (!verdict) continue
           important++
           try {

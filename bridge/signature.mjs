@@ -71,11 +71,34 @@ export const SPECLINE_SIGNATURE = {
   accent: '#0E6E85',
 }
 
+/**
+ * Plancheck Recruitment: a team signature with no personal name, so nothing
+ * links the agency to Salman or to SY Design Studio. The legal footer is the
+ * company's, as UK companies must show on business email.
+ */
+export const PLANCHECK_LOGO_URL = process.env.JARVIS_PLANCHECK_LOGO_URL ?? 'https://plancheckrecruitment.co.uk/email/logo-email.png'
+export const PLANCHECK_SIGNATURE = {
+  name: 'The Plancheck Recruitment team',
+  title: 'Building control, planning and architecture recruitment',
+  email: 'info@plancheckrecruitment.co.uk',
+  website: 'plancheckrecruitment.co.uk',
+  company: '',
+  plain: true,
+  logoUrl: PLANCHECK_LOGO_URL,
+  // The PNG is 406 x 80; shown at 162 px wide.
+  logoW: 162,
+  logoH: 32,
+  logoAlt: 'Plancheck Recruitment',
+  accent: '#10263f',
+  footer: 'Plancheck Recruitment Ltd · Registered in England and Wales, company no. 17526964 · 49 Durham Avenue, Hounslow TW5 0HG',
+}
+
 /** Which signature an account signs with. */
-export const signatureFor = (account) => (/@specline\.co\.uk\s*>?$/i.test(String(account ?? '')) ? SPECLINE_SIGNATURE : SIGNATURE)
+export const signatureFor = (account) =>
+  /@plancheckrecruitment\.co\.uk\s*>?$/i.test(String(account ?? '')) ? PLANCHECK_SIGNATURE : /@specline\.co\.uk\s*>?$/i.test(String(account ?? '')) ? SPECLINE_SIGNATURE : SIGNATURE
 
 export function signatureText(s = SIGNATURE) {
-  if (s.plain) return [s.name, s.title, s.email, s.website].filter(Boolean).join('\n')
+  if (s.plain) return [s.name, s.title, s.email, s.website, s.footer].filter(Boolean).join('\n')
   return [s.name, s.title, `Mobile: ${s.mobile}`, `Email: ${s.email}`, s.website, s.company].join('\n')
 }
 
@@ -98,6 +121,7 @@ function plainSignatureHtml(s, logoUrl) {
     (s.title && !logoUrl ? row(esc(s.title), `color:${GREY};`) : '') +
     row(`<a href="mailto:${s.email}" style="color:${CHARCOAL};text-decoration:none;">${esc(s.email)}</a>`, 'padding-top:8px;') +
     row(`<a href="https://${s.website}" style="color:${accent};text-decoration:none;">${esc(s.website)}</a>`) +
+    (s.footer ? row(esc(s.footer), `padding-top:10px;font-size:11px;line-height:15px;color:${GREY};`) : '') +
     `</table></td></tr></table>`
   )
 }

@@ -126,6 +126,11 @@ if (diag) {
     meh('knowledge: the store could not be read (the KNOWLEDGE folder)')
   }
   if (diag.apps) ok(`apps JARVIS has built: ${diag.apps.count} (press B for the shelf; ask for a dashboard to add one)`)
+  if (diag.plancheck) {
+    const p = diag.plancheck
+    if (!p.mailbox) meh('Plancheck: records ready, but the mailbox is not configured — add MAIL_n_USER=info@plancheckrecruitment.co.uk, MAIL_n_PASSWORD, MAIL_n_HOST=imap.hostinger.com, MAIL_n_SMTP_HOST=smtp.hostinger.com to .env.local')
+    else ok(`Plancheck: ${p.employers} employer(s), ${p.candidates} candidate(s), ${p.leadsOpen} open lead(s), ${p.chaseDue} chase(s) due, ${p.sentToday} sent today — mailbox connected`)
+  }
   if (diag.specline) {
     if (!diag.specline.configured) meh('Specline: not connected — generate a key in Specline → Admin → Settings → Your desk assistant, add it to .env.local as SPECLINE_AGENT_KEY')
     else {

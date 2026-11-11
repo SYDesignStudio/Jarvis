@@ -35,7 +35,7 @@ const sameMail = (a, b) =>
   a.subject.trim().toLowerCase() === b.subject.trim().toLowerCase() &&
   a.to.map(bare).sort().join(',') === b.to.map(bare).sort().join(',')
 
-export function createOutbox({ dir, accounts, transportFor = defaultTransport, file = fileMessage, unfile = unfileMessage, now = () => Date.now(), log = () => {} }) {
+export function createOutbox({ dir, accounts, transportFor = defaultTransport, file = fileMessage, unfile = unfileMessage, now = () => Date.now(), log = () => {}, gate = null, onSent = null }) {
   mkdirSync(dir, { recursive: true })
   const index = join(dir, 'outbox.json')
   const load = () => {
@@ -78,6 +78,11 @@ export function createOutbox({ dir, accounts, transportFor = defaultTransport, f
     const m = await buildMessage(accounts, opts)
     if (/gmail\.com$/i.test(m.acct.host)) throw new Error(`${m.acct.user} is a Gmail account — send it through Zapier Gmail as usual`)
     const s = sweep()
+    // The brand guard: who may write what from which mailbox, and daily caps.
+    if (gate) {
+      const why = gate({ account: m.acct.user, to: m.to, subject: m.subject, text: opts.text, pendingSameAccount: s.items.filter((i) => i.account === m.acct.user).length })
+      if (why) throw new Error(why)
+    }
     const id = s.next
     const entry = {
       id,
@@ -143,6 +148,11 @@ export function createOutbox({ dir, accounts, transportFor = defaultTransport, f
     try {
       filed = await file(acct, raw, '\\Sent', ['\\Seen'])
     } catch {}
+    try {
+      onSent?.(entry)
+    } catch (err) {
+      log(`[jarvis:mail] onSent hook failed for #${entry.id}: ${err.message}`)
+    }
     await discard(entry)
     return { ok: true, id: entry.id, entry, filed }
   }

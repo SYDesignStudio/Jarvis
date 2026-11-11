@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plancheck hub</title>
+<style>
+  :root { --pc-navy: #10263f; --pc-orange: #f08a24; --pc-paper: #f4f1ea; }
+  body { padding: 0; }
+  .top { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 18px; padding: 16px 22px 12px; background: linear-gradient(180deg, var(--bg) 70%, transparent); }
+  .mark { display: inline-flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; font-size: 14px; color: var(--ink); }
+  .mark i { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--pc-orange); border-radius: 3px; position: relative; }
+  .mark i::after { content: ''; position: absolute; left: 3px; top: 0px; width: 4px; height: 8px; border: solid var(--pc-orange); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+  .mark small { font-family: var(--mono); letter-spacing: 0; text-transform: none; color: var(--dim); font-weight: 400; }
+  nav { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+  nav button { padding: 8px 12px; border-color: transparent; color: var(--dim); }
+  nav button.on { color: var(--pc-orange); border-color: rgba(240, 138, 36, 0.45); background: rgba(240, 138, 36, 0.08); }
+  nav button b { font-family: var(--mono); font-weight: 500; font-size: 11px; margin-left: 6px; color: var(--ink); }
+  main { padding: 6px 22px 40px; }
+  section { display: none; }
+  section.on { display: block; }
+  .stats { margin-bottom: 18px; }
+  .ap-stat b { color: var(--pc-orange); }
+  .ap-stat.quiet b { color: var(--ink); }
+  .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 8px; }
+  .bar i { display: block; height: 100%; background: var(--pc-orange); }
+  .two { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 14px; }
+  @media (max-width: 900px) { .two { grid-template-columns: 1fr; } }
+  .ap-table td { font-size: 13px; }
+  .who { font-weight: 500; }
+  .sub { display: block; font-family: var(--mono); font-size: 11px; color: var(--dim); margin-top: 2px; }
+  .st { font: 500 10px/1 var(--display); letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--dim); white-space: nowrap; }
+  .st.hot { color: var(--pc-orange); border-color: rgba(240, 138, 36, 0.5); }
+  .st.good { color: var(--pass); border-color: rgba(95, 227, 161, 0.4); }
+  .st.off { color: var(--fail); border-color: rgba(255, 107, 94, 0.4); }
+  .act { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .act button { padding: 6px 9px; font-size: 10px; }
+  .act button.go { color: var(--pc-orange); border-color: rgba(240, 138, 36, 0.4); }
+  .todo { list-style: none; margin: 0; padding: 0; }
+  .todo li { padding: 9px 0; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: baseline; }
+  .todo li .day { font-family: var(--mono); font-size: 11px; color: var(--pc-orange); min-width: 86px; }
+  .todo li.today .day::before { content: '▸ '; }
+  .todo li.today { color: var(--ink); }
+  .todo li:not(.today) { color: var(--dim); }
+  .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .col h3 { margin-bottom: 8px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; margin-bottom: 8px; font-size: 13px; cursor: pointer; }
+  .card:hover { border-color: rgba(240, 138, 36, 0.5); }
+  .card small { display: block; color: var(--dim); font-family: var(--mono); font-size: 11px; }
+  .filter { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .filter input, .filter select { font-size: 13px; }
+  .log { font-family: var(--mono); font-size: 12px; color: var(--dim); }
+  .log b { color: var(--ink); font-weight: 500; }
+  .warn { color: var(--hold); }
+  .stamp { margin-left: 12px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+</style>
+</head>
+<body>
+  <div class="top">
+    <span class="mark"><i></i> Plancheck <small id="stamp">loading…</small></span>
+    <nav id="nav"></nav>
+  </div>
+  <main id="main">
+    <section id="week" class="on"></section>
+    <section id="leads"></section>
+    <section id="employers"></section>
+    <section id="candidates"></section>
+    <section id="pipeline"></section>
+    <section id="chase"></section>
+    <section id="compliance"></section>
+  </main>
+<script>
+  const TABS = [['week', 'This week'], ['leads', 'Leads'], ['employers', 'Employers'], ['candidates', 'Candidates'], ['pipeline', 'Pipeline'], ['chase', 'Chase'], ['compliance', 'Compliance']]
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  const d = (iso) => iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'
+  const st = (s) => '<span class="st ' + (/replied|registered|terms_signed|ready|placed|vacancy/.test(s) ? 'good' : /closed|leave|do_not_contact|not_interested/.test(s) ? 'off' : /contacted|approached|chased|submitted/.test(s) ? 'hot' : '') + '">' + esc(String(s).replace(/_/g, ' ')) + '</span>'
+  const ask = (t) => JARVIS.ask(t)
+  let data = null, tab = 'week', q = ''
+
+  const ROUTINE = [
+    [1, 'Monday', 'Run the vacancy search; review A-priority leads; email the best three'],
+    [2, 'Tuesday', 'Run the candidate search; check personal addresses; send approaches'],
+    [3, 'Wednesday', 'Candidate calls and screenings; write each summary the same day'],
+    [4, 'Thursday', 'Follow-ups: one chase to anyone five working days without a reply; Terms to anyone interested'],
+    [5, 'Friday', 'Update records; put authorised roles on the website; note the week\'s numbers'],
+  ]
+
+  function btn(label, prompt, go) { return '<button class="' + (go ? 'go' : '') + '" data-ask="' + esc(prompt) + '">' + esc(label) + '</button>' }
+
+  function renderWeek() {
+    const o = data, w = o.thisWeek, t = w.targets, day = new Date().getDay()
+    const pct = (a, b) => Math.min(100, Math.round(100 * a / Math.max(1, b)))
+    document.getElementById('week').innerHTML =
+      '<div class="ap-grid stats">' +
+        '<div class="ap-card ap-stat"><b>' + w.employerEmails + '<small style="font-size:14px;color:var(--dim)"> / ' + t.employerEmails + '</small></b><span>employer emails this week</span><div class="bar"><i style="width:' + pct(w.employerEmails, t.employerEmails) + '%"></i></div></div>' +
+        '<div class="ap-card ap-stat"><b>' + w.candidateEmails + '<small style="font-size:14px;color:var(--dim)"> / ' + t.candidateEmails + '</small></b><span>candidate emails this week</span><div class="bar"><i style="width:' + pct(w.candidateEmails, t.candidateEmails) + '%"></i></div></div>' +
+        '<div class="ap-card ap-stat ' + (o.chaseDue ? '' : 'quiet') + '"><b>' + o.chaseDue + '</b><span>chases due</span></div>' +
+        '<div class="ap-card ap-stat quiet"><b>' + o.sentToday + '<small style="font-size:14px;color:var(--dim)"> / ' + o.settings.dailyCap + '</small></b><span>sent today</span></div>' +
+      '</div>' +
+      '<div class="two"><div class="ap-card"><h2>The week</h2><ul class="todo">' +
+        ROUTINE.map(([n, name, job]) => '<li class="' + (n === day ? 'today' : '') + '"><span class="day">' + name + '</span><span>' + esc(job) + '</span></li>').join('') +
+      '</ul><p class="ap-note">Targets: 25 employer emails, 20 candidate emails, 5 calls, 2 screenings a week. First placement is the aim for week 12.</p>' +
+      '<div class="ap-row">' + btn('Run the vacancy search', 'Plancheck: run the weekly vacancy leads search (plancheck_search_plan leads) and report', true) + btn('Run the candidate search', 'Plancheck: run the weekly candidate search (plancheck_search_plan candidates) and report', true) + '</div></div>' +
+      '<div class="ap-card"><h2>Needs you</h2>' + needs() + '</div></div>'
+  }
+  function needs() {
+    const items = []
+    for (const r of data.chase) items.push('<li><span class="day">chase</span><span>' + esc(r.name || r.org) + (r.role ? ' — ' + esc(r.role) : '') + '</span></li>')
+    for (const e of data.employers.filter((x) => x.status === 'replied' || x.status === 'vacancy')) items.push('<li><span class="day">employer</span><span>' + esc(e.org || e.name) + ' has replied — ' + (e.termsSignedAt ? 'terms signed, brief the role' : 'send or chase the Terms') + '</span></li>')
+    for (const c of data.candidates.filter((x) => ['replied', 'registered'].includes(x.status))) items.push('<li><span class="day">candidate</span><span>' + esc(c.name) + ' — book the screening call</span></li>')
+    for (const c of data.candidates.filter((x) => x.status === 'ready')) items.push('<li><span class="day">ready</span><span>' + esc(c.name) + ' is screened and ready — match to a lead</span></li>')
+    if (data.dueForDeletion) items.push('<li><span class="day">privacy</span><span>' + data.dueForDeletion + ' approached candidate(s) past six months without a reply — delete</span></li>')
+    return items.length ? '<ul class="todo">' + items.join('') + '</ul>' : '<p class="ap-empty">Nothing waiting on you.</p>'
+  }
+
+  function filterBar(kinds) {
+    return '<div class="filter"><input placeholder="search…" value="' + esc(q) + '" oninput="q=this.value;render()">' + kinds + '</div>'
+  }
+  const match = (r) => !q || JSON.stringify(r).toLowerCase().includes(q.toLowerCase())
+
+  function renderLeads() {
+    const rows = data.leads.filter(match).sort((a, b) => (a.priority || 'Z').localeCompare(b.priority || 'Z') || String(a.closes || '').localeCompare(String(b.closes || '')))
+    document.getElementById('leads').innerHTML = filterBar('') + '<div class="ap-card"><table class="ap-table"><thead><tr><th>Lead</th><th>Discipline</th><th>Closes</th><th>Contact</th><th>Status</th><th></th></tr></thead><tbody>' +
+      (rows.map((l) => '<tr><td><span class="who">' + esc(l.org) + '</span><span class="sub">' + esc(l.role) + (l.salary ? ' · ' + esc(l.salary) : '') + (l.location ? ' · ' + esc(l.location) : '') + '</span></td>' +
+        '<td>' + esc(l.discipline || '') + (l.priority ? ' <span class="st ' + (l.priority === 'A' ? 'hot' : '') + '">' + esc(l.priority) + '</span>' : '') + '</td>' +
+        '<td>' + esc(l.closes || '—') + '</td>' +
+        '<td>' + (l.contactName ? esc(l.contactName) + '<span class="sub">' + esc(l.contactEmail || l.contactPhone || 'no address published') + '</span>' : '<span class="sub">none published</span>') + (l.agencies === 'no' ? '<span class="st off">no agencies</span>' : '') + '</td>' +
+        '<td>' + st(l.status) + (l.lastContactAt ? '<span class="sub">emailed ' + d(l.lastContactAt) + '</span>' : '') + '</td>' +
+        '<td class="act">' + (l.contactEmail && l.status === 'new' && l.agencies !== 'no' ? btn('Email', 'Plancheck: send the employer-vacancy-reply to lead ' + l.id + ' (' + l.org + ', ' + l.role + '); suggest two call slots next week', true) : '') +
+          btn('Open', 'Plancheck: open lead ' + l.id + ' in the browser: ' + (l.url || '')) + btn('Watch', 'Plancheck: set lead ' + l.id + ' to watch') + btn('Leave', 'Plancheck: set lead ' + l.id + ' to leave, with a one-line reason') + '</td></tr>').join('') || '<tr><td colspan="6" class="ap-empty">No leads yet. Run the vacancy search from This week.</td></tr>') +
+      '</tbody></table></div>'
+  }
+
+  function renderEmployers() {
+    const rows = data.employers.filter(match)
+    document.getElementById('employers').innerHTML = filterBar('') + '<div class="ap-card"><table class="ap-table"><thead><tr><th>Employer</th><th>Sector</th><th>Status</th><th>Last contact</th><th></th></tr></thead><tbody>' +
+      (rows.map((e) => '<tr><td><span class="who">' + esc(e.org || e.name) + '</span><span class="sub">' + esc(e.name || '') + (e.title ? ', ' + esc(e.title) : '') + ' · ' + esc(e.email || 'no email') + '</span></td>' +
+        '<td>' + esc(e.sector || '') + '</td><td>' + st(e.status) + (e.termsSignedAt ? '<span class="sub">terms ' + d(e.termsSignedAt) + '</span>' : '') + '</td>' +
+        '<td>' + d(e.lastContactAt) + (e.repliedAt ? '<span class="sub">replied ' + d(e.repliedAt) + '</span>' : e.chaseOn ? '<span class="sub">chase ' + esc(e.chaseOn) + '</span>' : '') + '</td>' +
+        '<td class="act">' + (e.email && !e.contactedAt ? btn('Introduce', 'Plancheck: send the employer-intro to employer ' + e.id, true) : '') +
+          (e.status === 'replied' && !e.termsSignedAt ? btn('Send Terms', 'Plancheck: send terms-cover with the Terms of Business attached to employer ' + e.id, true) : '') +
+          btn('Replied', 'Plancheck: mark employer ' + e.id + ' as replied and summarise what they said from the inbox') + btn('Terms signed', 'Plancheck: record that employer ' + e.id + ' has agreed the Terms of Business, citing the email') + '</td></tr>').join('') || '<tr><td colspan="5" class="ap-empty">No employers yet.</td></tr>') +
+      '</tbody></table></div>'
+  }
+
+  function renderCandidates() {
+    const rows = data.candidates.filter(match)
+    document.getElementById('candidates').innerHTML = filterBar('') + '<div class="ap-card"><table class="ap-table"><thead><tr><th>Candidate</th><th>Discipline</th><th>Status</th><th>Last contact</th><th></th></tr></thead><tbody>' +
+      (rows.map((c) => '<tr><td><span class="who">' + esc(c.name) + '</span><span class="sub">' + esc(c.title || '') + (c.org ? ' · ' + esc(c.org) : '') + ' · ' + esc(c.email || c.phone || 'no contact') + (c.contactType === 'personal' ? ' <span class="st">personal</span>' : '') + '</span></td>' +
+        '<td>' + esc(c.discipline || '') + (c.rbiClass ? ' ' + esc(c.rbiClass) : '') + (c.location ? '<span class="sub">' + esc(c.location) + '</span>' : '') + '</td>' +
+        '<td>' + st(c.status) + (c.privacyNoticeSentAt ? '' : c.contactedAt ? '<span class="sub warn">privacy notice not sent</span>' : '') + '</td>' +
+        '<td>' + d(c.lastContactAt) + (c.repliedAt ? '<span class="sub">replied ' + d(c.repliedAt) + '</span>' : c.chaseOn ? '<span class="sub">chase ' + esc(c.chaseOn) + '</span>' : '') + '</td>' +
+        '<td class="act">' + (c.email && !c.contactedAt ? btn('Approach', 'Plancheck: send the candidate-approach to candidate ' + c.id, true) : '') +
+          (['replied', 'registered'].includes(c.status) ? btn('Book call', 'Plancheck: send candidate-call-booking to candidate ' + c.id, true) : '') +
+          (['screened', 'call_booked'].includes(c.status) && c.discipline === 'building control' ? btn('Assessment', 'Plancheck: send the assessment-invitation to candidate ' + c.id + ' — I will create the link in the console first; ask me for it') : '') +
+          btn('Replied', 'Plancheck: mark candidate ' + c.id + ' as replied and record what they said from the inbox') + btn('Status', 'Plancheck: ask me which status to set candidate ' + c.id + ' to, then set it') + '</td></tr>').join('') || '<tr><td colspan="5" class="ap-empty">No candidates yet. Run the candidate search from This week.</td></tr>') +
+      '</tbody></table></div>'
+  }
+
+  function renderPipeline() {
+    const cols = [['approached', 'Approached'], ['replied', 'Replied'], ['registered', 'Registered'], ['call_booked', 'Call booked'], ['screened', 'Screened'], ['ready', 'Ready'], ['submitted', 'Submitted'], ['placed', 'Placed']]
+    document.getElementById('pipeline').innerHTML = '<div class="board">' + cols.map(([k, label]) => {
+      const cs = data.candidates.filter((c) => c.status === k)
+      return '<div class="col"><h3>' + label + ' <span class="sub">' + cs.length + '</span></h3>' + (cs.map((c) => '<div class="card" data-ask="' + esc('Plancheck: show me candidate ' + c.id + ' and what the next step is') + '">' + esc(c.name) + '<small>' + esc(c.discipline || '') + (c.rbiClass ? ' ' + esc(c.rbiClass) : '') + (c.location ? ' · ' + esc(c.location) : '') + '</small></div>').join('') || '<p class="ap-empty" style="padding:12px 0;font-size:12px">—</p>') + '</div>'
+    }).join('') + '</div>' +
+      (data.submissions.length ? '<div class="ap-card" style="margin-top:14px"><h2>Submissions</h2><table class="ap-table"><tbody>' + data.submissions.map((s) => '<tr><td>' + esc(s.id) + '</td><td>' + esc(s.candidateId) + ' → ' + esc(s.employerId) + '</td><td>' + d(s.at) + '</td><td>' + st(s.status) + '</td></tr>').join('') + '</tbody></table></div>' : '')
+  }
+
+  function renderChase() {
+    document.getElementById('chase').innerHTML = '<div class="ap-card"><h2>Due a follow-up</h2><p class="ap-note">Five working days without a reply. One chase only; after it, the record waits or closes.</p><table class="ap-table"><tbody>' +
+      (data.chase.map((r) => '<tr><td><span class="who">' + esc(r.name || r.org) + '</span><span class="sub">' + esc(r.kind) + ' ' + esc(r.id) + (r.role ? ' · ' + esc(r.role) : '') + ' · emailed ' + d(r.lastContactAt) + '</span></td><td class="act">' +
+        btn('Chase', 'Plancheck: send the ' + (r.kind === 'candidates' ? 'candidate-follow-up' : 'employer-follow-up') + ' to ' + r.kind.slice(0, -1) + ' ' + r.id, true) + btn('Replied', 'Plancheck: mark ' + r.kind.slice(0, -1) + ' ' + r.id + ' as replied — check the inbox for their reply first') + btn('Close', 'Plancheck: close ' + r.kind.slice(0, -1) + ' ' + r.id + ', no reply after one chase') + '</td></tr>').join('') || '<tr><td class="ap-empty">Nobody is due a chase.</td></tr>') +
+      '</tbody></table></div>'
+  }
+
+  function renderCompliance() {
+    const o = data
+    document.getElementById('compliance').innerHTML = '<div class="two">' +
+      '<div class="ap-card"><h2>Rules in force</h2><ul class="todo">' +
+        '<li><span class="day">terms</span><span>' + o.counts.termsSigned + ' employer(s) with signed Terms. No CV goes anywhere else.</span></li>' +
+        '<li><span class="day">consent</span><span>A candidate\'s yes is recorded per employer before a submission; ' + o.counts.submissions + ' submission(s) on file.</span></li>' +
+        '<li><span class="day">cap</span><span>' + o.sentToday + ' of ' + o.settings.dailyCap + ' emails sent today from the Plancheck mailbox.</span></li>' +
+        '<li><span class="day">deletion</span><span>' + (o.deletions.length ? o.deletions.length + ' approached candidate(s) past six months without a reply: ' + o.deletions.map((x) => esc(x.name)).join(', ') : 'No candidate past the six-month limit.') + '</span></li>' +
+        '<li><span class="day">blocked</span><span>' + (o.doNotContactList.length ? o.doNotContactList.map((x) => esc(x.name || x.email)).join(', ') : 'Do-not-contact list is empty.') + '</span></li>' +
+      '</ul>' + (o.deletions.length ? '<div class="ap-row">' + btn('Delete the overdue records', 'Plancheck: the candidates past six months without a reply are due for deletion — list them and ask me to confirm before closing each with the reason "deleted under the privacy notice"', true) + '</div>' : '') + '</div>' +
+      '<div class="ap-card"><h2>Outreach log</h2><div class="log">' + (o.outreach.slice().reverse().slice(0, 40).map((x) => d(x.at) + ' <b>' + esc(x.to) + '</b> ' + esc(x.subject) + (x.template ? ' <i>(' + esc(x.template) + ')</i>' : '') + (x.sent ? '' : ' <span class="warn">held</span>')).join('<br>') || 'Nothing sent yet.') + '</div></div></div>'
+  }
+
+  function render() {
+    if (!data) return
+    document.getElementById('nav').innerHTML = TABS.map(([k, label]) => '<button class="' + (tab === k ? 'on' : '') + '" data-tab="' + k + '">' + label + (k === 'chase' && data.chaseDue ? '<b>' + data.chaseDue + '</b>' : k === 'leads' ? '<b>' + data.counts.leadsOpen + '</b>' : '') + '</button>').join('')
+    for (const [k] of TABS) document.getElementById(k).classList.toggle('on', k === tab)
+    ;({ week: renderWeek, leads: renderLeads, employers: renderEmployers, candidates: renderCandidates, pipeline: renderPipeline, chase: renderChase, compliance: renderCompliance })[tab]()
+    document.getElementById('stamp').textContent = 'live · ' + new Date(data.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  }
+  async function load() {
+    try { data = await JARVIS.data('plancheck'); render() } catch (err) { document.getElementById('stamp').textContent = 'could not read the records: ' + err.message }
+  }
+  document.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-tab]'); if (t) { tab = t.dataset.tab; render(); return }
+    const a = e.target.closest('[data-ask]'); if (a) { ask(a.dataset.ask); a.blur() }
+  })
+  JARVIS.state.get().then((s) => { if (s && s.tab) tab = s.tab; load() })
+  document.addEventListener('click', () => JARVIS.state.set({ tab }))
+  JARVIS.onRefresh(load)
+  setInterval(load, 60 * 1000)
+</script>
+</body>
+</html>

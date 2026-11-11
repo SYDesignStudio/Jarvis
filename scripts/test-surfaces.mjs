@@ -917,6 +917,30 @@ test('phone: running out of Retell credit is named, probed without ringing anyon
   assert.ok(asked.every((b) => b.from_number === '+10000000000'), 'the probe dials from a number the account cannot own')
 })
 
+test('mail backlog: a pile after a gap is one event, with one prompt that quotes what fits and lists the rest', async () => {
+  const { backlogMode, backlogPrompt } = await import('../bridge/surfaces/backlog.mjs')
+  assert.equal(backlogMode(1, 20 * 3600_000), false, 'one email is never a backlog')
+  assert.equal(backlogMode(3, 2 * 3600_000), false, 'a few emails in the usual rhythm go one by one')
+  assert.equal(backlogMode(3, 20 * 3600_000), true, 'a few emails after a long gap are a backlog')
+  assert.equal(backlogMode(6, 0), true, 'a pile is a backlog whatever the gap')
+  const mk = (i, level, why, text = 'body') => ({ mail: { from: `Sender ${i} <s${i}@x.gov.uk>`, subject: `Subject ${i}`, date: new Date(2026, 10, 1 + i), text, attachments: i === 2 ? [{ name: 'notice.pdf', path: 'D:\\x\\notice.pdf' }] : [] }, verdict: { level, why } })
+  const items = [mk(3, 'important', ['client x']), mk(1, 'urgent', ['council', 'enforcement']), mk(2, 'important', ['council', 'condition']), mk(4, 'lead', ['new enquiry', 'loft'])]
+  const p = backlogPrompt(items, { account: 'info@x', since: new Date(2026, 10, 1), seen: 40, callAllowed: false, now: new Date(2026, 10, 11, 9) })
+  assert.ok(p.includes('40 email(s) arrived since'), 'says how many came in')
+  assert.ok(p.includes('1 urgent, 1 from councils, 1 new enquiries'), 'counts by kind')
+  assert.ok(p.indexOf('--- 1. [URGENT]') < p.indexOf('--- 2. [COUNCIL]') && p.indexOf('--- 2.') < p.indexOf('--- 4. [NEW ENQUIRY]'), 'oldest first, numbered')
+  assert.ok(p.includes('attachment: notice.pdf — saved at'), 'attachments named with their saved path')
+  assert.ok(p.includes('tracker_update') && p.includes('record_outcome') && p.includes('ONE Telegram message'), 'the instructions')
+  assert.ok(p.includes('do NOT ring'), 'outside call hours it must not ring')
+  assert.ok(backlogPrompt(items, { callAllowed: true }).includes('ONLY if something is both urgent and due within three working days'), 'in hours, one call at most')
+  // a very long pile: the first ones quoted, the rest one line each
+  const pile = Array.from({ length: 80 }, (_, i) => mk(i, 'important', ['council'], 'x'.repeat(1700)))
+  const big = backlogPrompt(pile)
+  assert.ok(big.length < 80_000, 'the prompt stays within bounds')
+  assert.ok(big.includes('(not quoted — open it with search_mail if it matters)'), 'the overflow is listed, not dropped')
+  assert.match(big, /\d+ quoted in full, \d+ listed only/)
+})
+
 let failed = 0
 for (const { name, fn } of tests) {
   try {

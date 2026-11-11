@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { ImapFlow } from 'imapflow'
+import { backlogMode } from './backlog.mjs'
 import { simpleParser } from 'mailparser'
 import { saveAttachments } from './attachments.mjs'
 
@@ -182,7 +183,7 @@ function writeState(path, state) {
  * @param {() => string} io.jobsMarkdown        current JOBS.md text
  * @param {(mail, verdict) => Promise<void>} io.onImportant  deliver it
  */
-export function createMailWatcher({ user, password, host = 'imap.gmail.com', statePath, jobsMarkdown, onImportant, onEvery = null, attachDir = null, pollMs = MAIL_POLL_MS, log = console.log }) {
+export function createMailWatcher({ user, password, host = 'imap.gmail.com', statePath, jobsMarkdown, onImportant, onBacklog = null, onEvery = null, attachDir = null, pollMs = MAIL_POLL_MS, log = console.log }) {
   if (!user || !password) return null
   let timer = null
   let checking = false
@@ -196,6 +197,9 @@ export function createMailWatcher({ user, password, host = 'imap.gmail.com', sta
     // out: reading attachments or working a council email takes minutes, and
     // the mailbox connection would drop underneath it.
     const pending = []
+    let gapMs = 0
+    let seenCount = 0
+    let sinceAt = null
     const client = new ImapFlow({ host, port: 993, secure: true, auth: { user, pass: password }, logger: false })
     try {
       await client.connect()
@@ -213,6 +217,7 @@ export function createMailWatcher({ user, password, host = 'imap.gmail.com', sta
         const ctx = jobsContext(jobsMarkdown())
         let seen = 0
         let important = 0
+        sinceAt = state.lastCheckAt ?? null
         const range = `${state.uidNext}:*`
         for await (const msg of client.fetch(range, { uid: true, envelope: true, source: true }, { uid: true })) {
           if (msg.uid < state.uidNext) continue
@@ -250,8 +255,13 @@ export function createMailWatcher({ user, password, host = 'imap.gmail.com', sta
           }
           pending.push({ mail, verdict })
         }
+        // How long since mail was last looked at: the gap that decides whether
+        // what was found is a day's post or a fortnight's.
+        gapMs = state.lastCheckAt ? Date.now() - state.lastCheckAt : 0
+        state.lastCheckAt = Date.now()
         writeState(statePath, state)
         last = { at: Date.now(), ok: true, error: '', seen, important }
+        seenCount = seen
       } finally {
         lock.release()
       }
@@ -262,11 +272,23 @@ export function createMailWatcher({ user, password, host = 'imap.gmail.com', sta
       await client.logout().catch(() => {})
     }
     try {
-      for (const { mail, verdict } of pending) {
+      // A pile that arrived while nobody was looking is handled as one event:
+      // one message, one session, one briefing — not a session per email and a
+      // phone call for every urgent subject line from a fortnight ago.
+      if (onBacklog && backlogMode(pending.length, gapMs)) {
+        log(`[jarvis:mail] ${user}: ${pending.length} important of ${seenCount} new since the last check ${Math.round(gapMs / 3600_000)} h ago — catching up as one`)
         try {
-          await onImportant(mail, verdict)
+          await onBacklog(pending, { since: sinceAt, seen: seenCount })
         } catch (err) {
-          log(`[jarvis:mail] delivery failed for "${mail.subject}": ${err.message}`)
+          log(`[jarvis:mail] catch-up failed: ${err.message}`)
+        }
+      } else {
+        for (const { mail, verdict } of pending) {
+          try {
+            await onImportant(mail, verdict)
+          } catch (err) {
+            log(`[jarvis:mail] delivery failed for "${mail.subject}": ${err.message}`)
+          }
         }
       }
     } finally {

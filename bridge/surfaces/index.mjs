@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { createTelegram } from './telegram.mjs'
 import { createMailWatcher, accountsFromEnv } from './mail.mjs'
 import { createAlertCalls, inCallHours, TOP_UP } from './alertcall.mjs'
+import { backlogPrompt } from './backlog.mjs'
 import { leadPrompt } from './leads.mjs'
 import { councilPrompt } from './council.mjs'
 import { attachmentBlock, documentsPrompt } from './attachments.mjs'
@@ -140,6 +141,7 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
         jobsMarkdown,
         attachDir: join(PATHS.inbox, 'Mail'),
         onImportant: (m, verdict) => deliver(m, verdict, a.user),
+        onBacklog: (items, info) => catchUp(items, info, a.user),
         // Planning Portal notifications go straight onto the tracker — read
         // exactly, by the bridge, with one quiet line to Telegram.
         onEvery: tracker
@@ -158,6 +160,30 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
     .filter(Boolean)
   const mail = mailboxes.length ? mailboxes : null
   let creditTimer = null
+
+  /**
+   * A backlog, after the PC has been off: say what is waiting, then one session
+   * works through the lot and sends one briefing. Without Telegram there is no
+   * session to run it on, so the emails go through one by one as usual.
+   */
+  async function catchUp(items, { since, seen }, account) {
+    if (!telegram) {
+      for (const { mail, verdict } of items) await deliver(mail, verdict, account)
+      return
+    }
+    const n = (f) => items.filter(f).length
+    const urgent = n((i) => i.verdict.level === 'urgent')
+    const leads = n((i) => i.verdict.level === 'lead')
+    const council = n((i) => i.verdict.level !== 'lead' && i.verdict.why.includes('council'))
+    const sinceLine = since ? new Date(since).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }) : 'the last check'
+    log(`[jarvis:mail] catch-up on ${account}: ${items.length} to work through (${urgent} urgent, ${council} council, ${leads} leads)`)
+    await telegram.notify(
+      `Catching up on ${account}, sir: ${seen} new email${seen === 1 ? '' : 's'} since ${sinceLine}, ${items.length} worth your attention — ${urgent} urgent, ${council} from councils, ${leads} new enquir${leads === 1 ? 'y' : 'ies'}. Working through them now; one briefing to follow.`,
+      { silent: true },
+    )
+    broadcast({ type: 'say', text: `Sir, ${seen} emails came in on ${account} while the machine was off. I am working through them; the briefing goes to your phone.`, listen: false, drift: true })
+    await telegram.run(backlogPrompt(items, { account, since, seen, callAllowed: Boolean(phone) && inCallHours() }))
+  }
 
   async function deliver(m, verdict, account) {
       // A new enquiry goes to the full JARVIS, who triages it and rings. Without

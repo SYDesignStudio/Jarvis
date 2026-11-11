@@ -507,6 +507,8 @@ export function createTelegram({ token, chatId, makeSession, speech = null, inbo
   return {
     notify,
     run,
+    /** A turn is in flight on the shared session; a catch-up waits rather than cutting in. */
+    busy: () => Boolean(session && !session.closed && session.busy),
     sendDocument,
     sendFile,
     /** For tests: feed one incoming message as if it came from getUpdates. */

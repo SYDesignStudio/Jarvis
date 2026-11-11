@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { ImapFlow } from 'imapflow'
-import { backlogMode, saveBacklog, loadBacklog, clearBacklog } from './backlog.mjs'
+import { backlogMode, saveBacklog, loadBacklog, clearBacklog, RETRY_MS } from './backlog.mjs'
 import { simpleParser } from 'mailparser'
 import { saveAttachments } from './attachments.mjs'
 
@@ -287,6 +287,9 @@ export function createMailWatcher({ user, password, host = 'imap.gmail.com', sta
       }
       if (onBacklog && (kept?.due || backlogMode(pending.length, gapMs))) {
         if (!kept?.due) log(`[jarvis:mail] ${user}: ${pending.length} important of ${seenCount} new since the last check ${Math.round(gapMs / 3600_000)} h ago — catching up as one`)
+        // On disk before the session starts: a restart half-way through must
+        // find the pile again, due at once.
+        saveBacklog(backlogFile, pending, { since: sinceAt, seen: seenCount, failures: (kept?.failures ?? 1) - 1 }, Date.now() - RETRY_MS)
         let ok = false
         try {
           ok = (await onBacklog(pending, { since: sinceAt, seen: seenCount })) !== false

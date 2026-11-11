@@ -182,6 +182,16 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
       { silent: true },
     )
     broadcast({ type: 'say', text: `Sir, ${seen} emails came in on ${account} while the machine was off. I am working through them; the briefing goes to your phone.`, listen: false, drift: true })
+    // Two inboxes can find their piles at the same moment. run() cuts into a
+    // busy session, which would kill the other catch-up half-way; so wait for
+    // it, up to 45 minutes, and if it is still busy let the pile be kept and
+    // tried again later.
+    const until = Date.now() + 45 * 60_000
+    while (telegram.busy() && Date.now() < until) await new Promise((r) => setTimeout(r, 15_000))
+    if (telegram.busy()) {
+      log(`[jarvis:mail] catch-up on ${account} is waiting: the Telegram session is still busy`)
+      return false
+    }
     return telegram.run(backlogPrompt(items, { account, since, seen, callAllowed: Boolean(phone) && inCallHours() }))
   }
 

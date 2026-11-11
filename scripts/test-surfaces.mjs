@@ -941,6 +941,30 @@ test('mail backlog: a pile after a gap is one event, with one prompt that quotes
   assert.match(big, /\d+ quoted in full, \d+ listed only/)
 })
 
+test('mail backlog: a pile whose session failed is kept and retried after a pause, then cleared', async () => {
+  const { saveBacklog, loadBacklog, clearBacklog, RETRY_MS } = await import('../bridge/surfaces/backlog.mjs')
+  const { mkdtempSync, existsSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const file = join(mkdtempSync(join(tmpdir(), 'bl-')), 'state.json.backlog.json')
+  assert.equal(loadBacklog(file), null, 'nothing kept yet')
+  const items = [{ mail: { id: 'a', from: 'x', subject: 's', date: new Date().toISOString(), text: 't', attachments: [] }, verdict: { level: 'important', why: ['council'] } }]
+  const t0 = Date.now()
+  saveBacklog(file, items, { since: t0 - 86400_000, seen: 12 }, t0)
+  const soon = loadBacklog(file, t0 + 60_000)
+  assert.equal(soon.due, false, 'not retried straight away')
+  assert.equal(soon.failures, 1)
+  const later = loadBacklog(file, t0 + RETRY_MS + 1)
+  assert.equal(later.due, true, 'retried after the pause')
+  assert.equal(later.items[0].mail.id, 'a')
+  assert.equal(later.seen, 12)
+  saveBacklog(file, items, { failures: later.failures }, t0 + RETRY_MS + 1)
+  assert.equal(loadBacklog(file, t0 + RETRY_MS + 2).failures, 2, 'failures count up')
+  clearBacklog(file)
+  assert.ok(!existsSync(file))
+  clearBacklog(file)
+})
+
 let failed = 0
 for (const { name, fn } of tests) {
   try {

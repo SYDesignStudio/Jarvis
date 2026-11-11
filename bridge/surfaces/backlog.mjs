@@ -9,6 +9,35 @@
  * say what is waiting, one session that works through the lot, one briefing.
  */
 
+import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs'
+
+export const RETRY_MS = 30 * 60_000
+
+/**
+ * A backlog that could not be worked (the session failed — a lapsed login, no
+ * network) is kept on disk and tried again at the next check after a pause,
+ * so a pile found once is never simply forgotten. The watermark has already
+ * moved on; this file is the only copy.
+ */
+export function saveBacklog(file, items, { since = null, seen = 0, failures = 0 } = {}, now = Date.now()) {
+  writeFileSync(file, JSON.stringify({ items, since, seen, failures: failures + 1, retryAt: now + RETRY_MS }))
+}
+export function loadBacklog(file, now = Date.now()) {
+  if (!existsSync(file)) return null
+  try {
+    const saved = JSON.parse(readFileSync(file, 'utf8'))
+    if (!Array.isArray(saved.items) || !saved.items.length) return null
+    return { ...saved, due: now >= (saved.retryAt ?? 0) }
+  } catch {
+    return null
+  }
+}
+export function clearBacklog(file) {
+  try {
+    unlinkSync(file)
+  } catch {}
+}
+
 /** Whether a check's findings should be handled as a backlog rather than one by one. */
 export function backlogMode(count, gapMs, { min = 6, ageMs = 12 * 3600_000 } = {}) {
   if (count >= min) return true

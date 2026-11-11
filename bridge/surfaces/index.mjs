@@ -169,7 +169,7 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
   async function catchUp(items, { since, seen }, account) {
     if (!telegram) {
       for (const { mail, verdict } of items) await deliver(mail, verdict, account)
-      return
+      return true
     }
     const n = (f) => items.filter(f).length
     const urgent = n((i) => i.verdict.level === 'urgent')
@@ -182,7 +182,7 @@ export function createSurfaces({ env, dataDir, jobsFile, makeSession, broadcast,
       { silent: true },
     )
     broadcast({ type: 'say', text: `Sir, ${seen} emails came in on ${account} while the machine was off. I am working through them; the briefing goes to your phone.`, listen: false, drift: true })
-    await telegram.run(backlogPrompt(items, { account, since, seen, callAllowed: Boolean(phone) && inCallHours() }))
+    return telegram.run(backlogPrompt(items, { account, since, seen, callAllowed: Boolean(phone) && inCallHours() }))
   }
 
   async function deliver(m, verdict, account) {

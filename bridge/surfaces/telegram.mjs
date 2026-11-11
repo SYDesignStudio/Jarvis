@@ -451,6 +451,11 @@ export function createTelegram({ token, chatId, makeSession, speech = null, inbo
     }, 4500)
     try {
       const { text } = await session.ask(prompt)
+      // The SDK can hand back a sign-in failure as the answer's text. That is
+      // not an answer; the caller must know nothing was done.
+      if (/^(Failed to authenticate|Not logged in|Invalid API key|Authentication failed)\b/i.test(String(text ?? '').trim())) {
+        throw new Error(`${String(text).trim().slice(0, 160)} — run \`claude\` on the PC and sign in, then restart JARVIS`)
+      }
       await notify(text || 'Done, sir.')
       return true
     } catch (err) {

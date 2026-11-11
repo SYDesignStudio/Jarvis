@@ -164,6 +164,23 @@ try {
 
 // ------------------------------------------------------------------ brain
 section('Brain')
+// Every session runs on the PC's Claude sign-in. After weeks off it can lapse,
+// and then the desk, Telegram and the catch-up all fail — quietly, if nobody
+// is looking. Cheap to check, so it is checked every time.
+try {
+  const { execSync } = await import('node:child_process')
+  const status = JSON.parse(execSync('claude auth status', { encoding: 'utf8', timeout: 20_000, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }))
+  if (status.loggedIn) ok(`signed in to Claude as ${status.email ?? 'the practice account'}${status.subscriptionType ? ` (${status.subscriptionType})` : ''}`)
+  else bad('JARVIS is signed out of Claude — the desk, Telegram and the catch-up all fail', 'run  claude  in a terminal on the PC, sign in, then restart JARVIS')
+} catch (err) {
+  // Signed out, the command exits non-zero but still prints its JSON.
+  let out = null
+  try {
+    out = JSON.parse(String(err.stdout ?? ''))
+  } catch {}
+  if (out && out.loggedIn === false) bad('JARVIS is signed out of Claude — the desk, Telegram and the catch-up all fail', 'run  claude  in a terminal on the PC, sign in, then restart JARVIS')
+  else meh(`could not check the Claude sign-in: ${err.message.split('\n')[0]}`)
+}
 if (FREE) {
   meh('skipped the live turn (--free)')
 } else {

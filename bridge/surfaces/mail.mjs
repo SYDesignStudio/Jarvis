@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { ImapFlow } from 'imapflow'
-import { backlogMode } from './backlog.mjs'
+import { backlogMode, saveBacklog, loadBacklog, clearBacklog } from './backlog.mjs'
 import { simpleParser } from 'mailparser'
 import { saveAttachments } from './attachments.mjs'
 
@@ -189,6 +189,7 @@ export function createMailWatcher({ user, password, host = 'imap.gmail.com', sta
   let checking = false
   let last = { at: 0, ok: false, error: '', seen: 0, important: 0 }
   const state = readState(statePath)
+  const backlogFile = `${statePath}.backlog.json`
 
   async function check() {
     if (checking) return
@@ -275,12 +276,36 @@ export function createMailWatcher({ user, password, host = 'imap.gmail.com', sta
       // A pile that arrived while nobody was looking is handled as one event:
       // one message, one session, one briefing — not a session per email and a
       // phone call for every urgent subject line from a fortnight ago.
-      if (onBacklog && backlogMode(pending.length, gapMs)) {
-        log(`[jarvis:mail] ${user}: ${pending.length} important of ${seenCount} new since the last check ${Math.round(gapMs / 3600_000)} h ago — catching up as one`)
+      // A pile kept from an earlier check whose session failed joins this one.
+      const kept = onBacklog ? loadBacklog(backlogFile) : null
+      if (kept && kept.due) {
+        const ids = new Set(pending.map((p) => p.mail.id))
+        for (const item of kept.items) if (!ids.has(item.mail.id)) pending.unshift(item)
+        sinceAt = kept.since ?? sinceAt
+        seenCount += kept.seen ?? 0
+        log(`[jarvis:mail] ${user}: retrying the catch-up of ${kept.items.length} email(s) (attempt ${kept.failures + 1})`)
+      }
+      if (onBacklog && (kept?.due || backlogMode(pending.length, gapMs))) {
+        if (!kept?.due) log(`[jarvis:mail] ${user}: ${pending.length} important of ${seenCount} new since the last check ${Math.round(gapMs / 3600_000)} h ago — catching up as one`)
+        let ok = false
         try {
-          await onBacklog(pending, { since: sinceAt, seen: seenCount })
+          ok = (await onBacklog(pending, { since: sinceAt, seen: seenCount })) !== false
         } catch (err) {
           log(`[jarvis:mail] catch-up failed: ${err.message}`)
+        }
+        if (ok) clearBacklog(backlogFile)
+        else {
+          saveBacklog(backlogFile, pending, { since: sinceAt, seen: seenCount, failures: kept?.failures ?? 0 })
+          log(`[jarvis:mail] ${user}: the catch-up did not go through — ${pending.length} email(s) kept, trying again in 30 minutes`)
+        }
+      } else if (kept && !kept.due) {
+        // not time yet; today's few go through one by one as usual
+        for (const { mail, verdict } of pending) {
+          try {
+            await onImportant(mail, verdict)
+          } catch (err) {
+            log(`[jarvis:mail] delivery failed for "${mail.subject}": ${err.message}`)
+          }
         }
       } else {
         for (const { mail, verdict } of pending) {
